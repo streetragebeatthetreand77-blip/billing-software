@@ -11,32 +11,47 @@ import { motion } from "framer-motion";
 export function SalesRecords() {
   const [search, setSearch] = useState("");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [gstFilter, setGstFilter] = useState<'all' | 'gst' | 'nongst'>('all');
 
-  const filtered = mockTransactions.filter(tx => 
-    tx.id.toLowerCase().includes(search.toLowerCase()) || 
-    (tx.customer && tx.customer.toLowerCase().includes(search.toLowerCase())) ||
-    tx.time.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = mockTransactions.filter(tx => {
+    if (gstFilter === 'gst') {
+      if (tx.isGst === false) return false;
+    } else if (gstFilter === 'nongst') {
+      if (tx.isGst !== false) return false;
+    }
+    return (
+      tx.id.toLowerCase().includes(search.toLowerCase()) || 
+      (tx.customer && tx.customer.toLowerCase().includes(search.toLowerCase())) ||
+      tx.time.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   const getTxDetails = (tx: Transaction) => {
-    let subtotal = 0;
-    let cgst = 0;
-    let sgst = 0;
-    let items: { name: string; info: string; qty: number; total: number }[] = [];
+    let discount = tx.discount || 0;
+    let subtotal = tx.subtotal || 0;
+    let cgst = tx.cgst || 0;
+    let sgst = tx.sgst || 0;
+    let items: { name: string; info: string; qty: number; total: number; price: number; hsn?: string }[] = [];
 
     if (tx.itemsList && tx.itemsList.length > 0) {
       tx.itemsList.forEach(item => {
         const itemSubtotal = item.price * item.quantity;
-        subtotal += itemSubtotal;
-        cgst += item.cgst;
-        sgst += item.sgst;
         items.push({
           name: item.name,
           info: `Size: ${item.selectedSize} | Color: ${item.selectedColor}`,
           qty: item.quantity,
-          total: itemSubtotal
+          total: itemSubtotal,
+          price: item.price,
+          hsn: item.price < 1000 ? '6205' : '6206'
         });
       });
+      if (!subtotal) {
+        tx.itemsList.forEach(item => {
+          subtotal += item.price * item.quantity;
+          cgst += item.cgst;
+          sgst += item.sgst;
+        });
+      }
     } else {
       const isLowTax = (tx.amount / tx.items) < 1000;
       const taxRate = isLowTax ? 0.05 : 0.12;
@@ -47,25 +62,27 @@ export function SalesRecords() {
         name: "Linen Apparel / Casuals",
         info: "HSN: 6205 | Size: M | Color: Default",
         qty: tx.items,
-        total: subtotal
+        total: subtotal,
+        price: tx.amount / tx.items,
+        hsn: "6205"
       });
     }
 
-    return { subtotal, cgst, sgst, items };
+    return { subtotal, discount, cgst, sgst, items };
   };
 
   const handleReprint = (tx: Transaction) => {
-    const { subtotal, cgst, sgst, items } = getTxDetails(tx);
+    const { subtotal, discount, cgst, sgst, items } = getTxDetails(tx);
+    const isGst = tx.isGst !== false;
 
     const printEl = document.createElement('div');
     printEl.id = 'tax-invoice';
-    printEl.style.padding = '20px';
     printEl.innerHTML = `
-      <div style="font-family: monospace; text-align: center; color: #141414; padding: 10px;">
+      <div style="font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
         <h2 style="margin: 0 0 5px 0; font-size: 20px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">STREET RAGE</h2>
         <p style="margin: 0; font-size: 10px; line-height: 1.2; color: #666666;">${STORE_ADDRESS.split(', ').join('<br/>')}</p>
         <p style="margin: 3px 0; font-size: 10px; color: #666666;">Tel: ${STORE_PHONE}</p>
-        <p style="margin: 5px 0; font-size: 10px; color: #666666;">GSTIN: ${GSTIN}</p>
+        <p style="margin: 5px 0; font-size: 10px; color: #666666;">${isGst ? `GSTIN: ${GSTIN}` : 'ESTIMATE / NON-GST'}</p>
         <div style="margin: 10px 0; border-top: 1px dashed #CCCCCC; padding-top: 10px;">
           <h3 style="margin: 0; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">REPRINT TAX INVOICE</h3>
           <p style="margin: 5px 0 0 0; font-size: 9px; color: #999999;">${tx.time}</p>
@@ -90,7 +107,7 @@ export function SalesRecords() {
               <tr style="border-b: 1px solid #EAEAEA;">
                 <td style="padding: 6px 0;">
                   <div>${item.name}</div>
-                  <div style="font-size: 8px; color: #666666;">${item.info}</div>
+                  <div style="font-size: 8px; color: #666666;">${item.info} | HSN: ${item.hsn || '6205'}</div>
                 </td>
                 <td style="padding: 6px 0; text-align: center;">${item.qty}</td>
                 <td style="padding: 6px 0; text-align: right;">₹${item.total.toLocaleString()}</td>
@@ -101,9 +118,19 @@ export function SalesRecords() {
 
         <div style="border-top: 1px solid #CCCCCC; padding-top: 8px; font-size: 10px; line-height: 1.5;">
           <div style="display: flex; justify-content: space-between;">
-            <span>Taxable Value:</span>
+            <span>Subtotal:</span>
             <span>₹${subtotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
           </div>
+          ${discount > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #10b981;">
+              <span>Discount (${tx.discountType === 'percentage' ? `${tx.discountValue}%` : 'Flat'}):</span>
+              <span>-₹${discount.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: #666666;">
+              <span>Taxable Value:</span>
+              <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          ` : ''}
           <div style="display: flex; justify-content: space-between; color: #666666;">
             <span>CGST:</span>
             <span>₹${cgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
@@ -121,6 +148,108 @@ export function SalesRecords() {
         <p style="margin: 25px 0 0 0; font-size: 9px; color: #999999; text-transform: uppercase; letter-spacing: 1px;">Thank you for shopping<br/>STREET RAGE Omnichannel POS</p>
       </div>
     `;
+
+    if (isGst) {
+      const hsnGroups: Record<string, {
+        hsn: string;
+        taxableValue: number;
+        taxRate: number;
+        cgst: number;
+        sgst: number;
+        total: number;
+      }> = {};
+
+      const discountRatio = subtotal > 0 ? (discount / subtotal) : 0;
+
+      items.forEach(item => {
+        const itemHsn = item.hsn || '6205';
+        const rawItemSubtotal = item.total;
+        const itemDiscount = Math.round(rawItemSubtotal * discountRatio * 100) / 100;
+        const taxable = Math.max(0, rawItemSubtotal - itemDiscount);
+
+        const taxRatePercent = item.price < 1000 ? 5 : 12;
+
+        if (!hsnGroups[itemHsn]) {
+          hsnGroups[itemHsn] = {
+            hsn: itemHsn,
+            taxableValue: 0,
+            taxRate: taxRatePercent,
+            cgst: 0,
+            sgst: 0,
+            total: 0
+          };
+        }
+
+        const group = hsnGroups[itemHsn];
+        group.taxableValue += taxable;
+        
+        // Calculate cgst and sgst for this item in the group
+        const taxRate = taxRatePercent / 100;
+        const itemCgst = Math.round(taxable * (taxRate / 2) * 100) / 100;
+        const itemSgst = Math.round(taxable * (taxRate / 2) * 100) / 100;
+        
+        group.cgst += itemCgst;
+        group.sgst += itemSgst;
+        group.total += (taxable + itemCgst + itemSgst);
+      });
+
+      printEl.innerHTML += `
+        <div style="page-break-before: always; break-before: page; font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
+          <h2 style="margin: 0 0 5px 0; font-size: 16px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">TAX FILING SLIP</h2>
+          <p style="margin: 0; font-size: 9px; color: #666666;">STREET RAGE BACKOFFICE COPY</p>
+          <div style="margin: 10px 0; border-top: 1px dashed #CCCCCC; padding-top: 10px; text-align: left; font-size: 9px;">
+            <strong>Invoice Ref:</strong> ${tx.id}<br/>
+            <strong>Date:</strong> ${tx.time}<br/>
+            <strong>GSTIN:</strong> ${GSTIN}
+          </div>
+
+          <table style="width: 100%; font-size: 8px; text-align: left; margin: 15px 0; border-collapse: collapse;">
+            <thead>
+              <tr style="border-b: 1px solid #CCCCCC; font-weight: bold;">
+                <th style="padding: 4px 0;">HSN</th>
+                <th style="padding: 4px 0; text-align: right;">Taxable (₹)</th>
+                <th style="padding: 4px 0; text-align: right;">Rate</th>
+                <th style="padding: 4px 0; text-align: right;">CGST (₹)</th>
+                <th style="padding: 4px 0; text-align: right;">SGST (₹)</th>
+                <th style="padding: 4px 0; text-align: right;">Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${Object.values(hsnGroups).map(group => `
+                <tr style="border-b: 1px solid #EAEAEA;">
+                  <td style="padding: 6px 0; font-weight: bold;">${group.hsn}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.taxableValue.toFixed(2)}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.taxRate}%</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.cgst.toFixed(2)}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.sgst.toFixed(2)}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="border-top: 1px solid #CCCCCC; padding-top: 8px; font-size: 9px; line-height: 1.5; text-align: left;">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Total Taxable Amount:</span>
+              <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Total CGST Collected:</span>
+              <span>₹${cgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Total SGST Collected:</span>
+              <span>₹${sgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #141414; padding-top: 5px; margin-top: 5px;">
+              <span>Total Tax Collected:</span>
+              <span>₹${(cgst + sgst).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          </div>
+          <p style="margin: 25px 0 0 0; font-size: 8px; color: #999999; text-transform: uppercase; letter-spacing: 1px;">SLIP END - RETAIN FOR AUDIT</p>
+        </div>
+      `;
+    }
 
     const styleEl = document.createElement('style');
     styleEl.innerHTML = `@page { size: 80mm 200mm; margin: 0; }`;
@@ -144,14 +273,39 @@ export function SalesRecords() {
           <h2 className="font-serif italic text-muted-foreground text-sm uppercase tracking-widest mb-1">Records</h2>
           <h1 className="font-sans text-4xl tracking-tight text-[#141414] font-light">Sales <span className="font-medium">History</span></h1>
         </div>
-        <div className="relative w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-          <Input 
-            placeholder="Search by invoice, customer, date..." 
-            className="pl-9 bg-white border-0 shadow-sm"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
+        <div className="flex gap-3 items-center">
+          <div className="relative w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+            <Input 
+              placeholder="Search by invoice, customer, date..." 
+              className="pl-9 bg-white border-0 shadow-sm animate-in fade-in"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-1 bg-white p-1 rounded-xl border border-[#E4E3E0] shadow-sm">
+            <button
+              type="button"
+              className={`text-xs font-mono uppercase px-3 py-1.5 rounded-lg transition-all ${gstFilter === 'all' ? 'bg-[#141414] text-white font-bold' : 'text-[#666666] hover:text-[#141414]'}`}
+              onClick={() => setGstFilter('all')}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              className={`text-xs font-mono uppercase px-3 py-1.5 rounded-lg transition-all ${gstFilter === 'gst' ? 'bg-[#141414] text-white font-bold' : 'text-[#666666] hover:text-[#141414]'}`}
+              onClick={() => setGstFilter('gst')}
+            >
+              GST Bills
+            </button>
+            <button
+              type="button"
+              className={`text-xs font-mono uppercase px-3 py-1.5 rounded-lg transition-all ${gstFilter === 'nongst' ? 'bg-[#141414] text-white font-bold' : 'text-[#666666] hover:text-[#141414]'}`}
+              onClick={() => setGstFilter('nongst')}
+            >
+              Non-GST
+            </button>
+          </div>
         </div>
       </div>
 

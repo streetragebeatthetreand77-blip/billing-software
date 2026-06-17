@@ -32,6 +32,13 @@ export interface Transaction {
   status: "Completed" | "Refunded";
   itemsList?: TransactionItem[];
   paymentMode?: "Cash" | "Card" | "UPI" | "Store Credit";
+  discount?: number;
+  discountType?: "percentage" | "flat";
+  discountValue?: number;
+  subtotal?: number;
+  cgst?: number;
+  sgst?: number;
+  isGst?: boolean;
 }
 
 export interface Customer {

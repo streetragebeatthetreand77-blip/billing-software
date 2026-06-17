@@ -35,6 +35,9 @@ export function POS() {
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Card" | "UPI" | "Store Credit">("Cash");
   const [validationError, setValidationError] = useState<string | null>(null);
   const [isGstBill, setIsGstBill] = useState(true);
+  const [discountType, setDiscountType] = useState<'percentage' | 'flat'>('percentage');
+  const [discountValue, setDiscountValue] = useState<number>(0);
+  const [currentTransaction, setCurrentTransaction] = useState<Transaction | null>(null);
 
   const categories = ["All", ...Array.from(new Set(mockProducts.map(p => p.category)))];
 
@@ -113,12 +116,36 @@ export function POS() {
   // Tax calculation
   const billDetails = useMemo(() => {
     let subtotalRaw = 0;
+    
+    // Calculate raw subtotal first
+    cart.forEach(item => {
+      subtotalRaw += item.price * item.quantity;
+    });
+
+    // Calculate discount amount
+    let discountAmount = 0;
+    if (discountType === 'percentage') {
+      discountAmount = Math.round((subtotalRaw * (discountValue / 100)) * 100) / 100;
+    } else {
+      discountAmount = discountValue;
+    }
+    // Cap discount at subtotalRaw
+    if (discountAmount > subtotalRaw) {
+      discountAmount = subtotalRaw;
+    }
+
+    // Proportional discount ratio
+    const discountRatio = subtotalRaw > 0 ? (discountAmount / subtotalRaw) : 0;
+
+    let discountedSubtotalRaw = 0;
     let cgstRaw = 0;
     let sgstRaw = 0;
 
     const items = cart.map(item => {
       const itemSubtotal = item.price * item.quantity;
-      subtotalRaw += itemSubtotal;
+      const itemDiscount = Math.round(itemSubtotal * discountRatio * 100) / 100;
+      const itemDiscountedSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+      discountedSubtotalRaw += itemDiscountedSubtotal;
 
       // GST rule: < 1000 is 5% (2.5 + 2.5), >= 1000 is 12% (6 + 6)
       const isLowTax = item.price < 1000;
@@ -126,8 +153,8 @@ export function POS() {
       const cgstRate = taxRate / 2;
       const sgstRate = taxRate / 2;
 
-      const cgstAmount = Math.round(itemSubtotal * cgstRate * 100) / 100;
-      const sgstAmount = Math.round(itemSubtotal * sgstRate * 100) / 100;
+      const cgstAmount = Math.round(itemDiscountedSubtotal * cgstRate * 100) / 100;
+      const sgstAmount = Math.round(itemDiscountedSubtotal * sgstRate * 100) / 100;
 
       cgstRaw += cgstAmount;
       sgstRaw += sgstAmount;
@@ -135,6 +162,8 @@ export function POS() {
       return {
         ...item,
         itemSubtotal,
+        itemDiscount,
+        itemDiscountedSubtotal,
         taxRate: taxRate * 100,
         cgstAmount,
         sgstAmount
@@ -142,12 +171,213 @@ export function POS() {
     });
 
     const subtotal = Math.round(subtotalRaw * 100) / 100;
+    const totalDiscount = Math.round(discountAmount * 100) / 100;
+    const discountedSubtotal = Math.round(discountedSubtotalRaw * 100) / 100;
     const totalCgst = Math.round(cgstRaw * 100) / 100;
     const totalSgst = Math.round(sgstRaw * 100) / 100;
-    const total = Math.round((subtotal + totalCgst + totalSgst) * 100) / 100;
+    const total = Math.round((discountedSubtotal + totalCgst + totalSgst) * 100) / 100;
 
-    return { items, subtotal, totalCgst, totalSgst, total };
-  }, [cart, isGstBill]);
+    return { items, subtotal, totalDiscount, discountedSubtotal, totalCgst, totalSgst, total };
+  }, [cart, discountType, discountValue, isGstBill]);
+
+  const handlePrintReceipt = () => {
+    if (!currentTransaction) return;
+
+    const tx = currentTransaction;
+    const isGst = tx.isGst !== false;
+    const discount = tx.discount || 0;
+    const subtotal = tx.subtotal || 0;
+    const cgst = tx.cgst || 0;
+    const sgst = tx.sgst || 0;
+    const finalAmount = tx.amount;
+
+    const printEl = document.createElement('div');
+    printEl.id = 'tax-invoice';
+
+    let htmlContent = `
+      <div style="font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
+        <h2 style="margin: 0 0 5px 0; font-size: 20px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">STREET RAGE</h2>
+        <p style="margin: 0; font-size: 10px; line-height: 1.2; color: #666666;">${STORE_ADDRESS.split(', ').join('<br/>')}</p>
+        <p style="margin: 3px 0; font-size: 10px; color: #666666;">Tel: ${STORE_PHONE}</p>
+        <p style="margin: 5px 0; font-size: 10px; color: #666666;">${isGst ? `GSTIN: ${GSTIN}` : 'ESTIMATE / NON-GST'}</p>
+        <div style="margin: 10px 0; border-top: 1px dashed #CCCCCC; padding-top: 10px;">
+          <h3 style="margin: 0; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">${isGst ? 'TAX INVOICE' : 'RETAIL BILL'}</h3>
+          <p style="margin: 5px 0 0 0; font-size: 9px; color: #999999;">${tx.time}</p>
+        </div>
+        
+        <div style="text-align: left; background: #F9F9F9; padding: 6px; margin: 10px 0; font-size: 10px; border-radius: 4px;">
+          <strong>Invoice ID:</strong> ${tx.id}<br/>
+          <strong>Client:</strong> ${tx.customer || 'Walk-in Customer'}<br/>
+          <strong>Payment Mode:</strong> ${tx.paymentMode || 'Cash'}
+        </div>
+
+        <table style="width: 100%; font-size: 10px; text-align: left; margin: 15px 0; border-collapse: collapse;">
+          <thead>
+            <tr style="border-b: 1px solid #CCCCCC;">
+              <th style="padding: 4px 0;">Item / Desc</th>
+              <th style="padding: 4px 0; text-align: center;">Qty</th>
+              <th style="padding: 4px 0; text-align: right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(tx.itemsList || []).map(item => `
+              <tr style="border-b: 1px solid #EAEAEA;">
+                <td style="padding: 6px 0;">
+                  <div>${item.name}</div>
+                  <div style="font-size: 8px; color: #666666;">${item.selectedSize}/${item.selectedColor} | HSN: ${item.price < 1000 ? '6205' : '6206'}</div>
+                </td>
+                <td style="padding: 6px 0; text-align: center;">${item.quantity}</td>
+                <td style="padding: 6px 0; text-align: right;">₹${(item.price * item.quantity).toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="border-top: 1px solid #CCCCCC; padding-top: 8px; font-size: 10px; line-height: 1.5;">
+          <div style="display: flex; justify-content: space-between;">
+            <span>Subtotal:</span>
+            <span>₹${subtotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+          </div>
+          ${discount > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #10b981;">
+              <span>Discount (${tx.discountType === 'percentage' ? `${tx.discountValue}%` : 'Flat'}):</span>
+              <span>-₹${discount.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: #666666;">
+              <span>Taxable Value:</span>
+              <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; color: #666666;">
+            <span>CGST:</span>
+            <span>₹${cgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; color: #666666;">
+            <span>SGST:</span>
+            <span>₹${sgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; margin-top: 5px; border-top: 1px solid #141414; padding-top: 5px;">
+            <span>Grand Total:</span>
+            <span>₹${finalAmount.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+          </div>
+        </div>
+        
+        <p style="margin: 25px 0 0 0; font-size: 9px; color: #999999; text-transform: uppercase; letter-spacing: 1px;">Thank you for shopping<br/>STREET RAGE Omnichannel POS</p>
+      </div>
+    `;
+
+    if (isGst) {
+      const hsnGroups: Record<string, {
+        hsn: string;
+        taxableValue: number;
+        taxRate: number;
+        cgst: number;
+        sgst: number;
+        total: number;
+      }> = {};
+
+      const discountRatio = subtotal > 0 ? (discount / subtotal) : 0;
+
+      (tx.itemsList || []).forEach(item => {
+        const itemHsn = item.price < 1000 ? '6205' : '6206';
+        const rawItemSubtotal = item.price * item.quantity;
+        const itemDiscount = Math.round(rawItemSubtotal * discountRatio * 100) / 100;
+        const taxable = Math.max(0, rawItemSubtotal - itemDiscount);
+
+        const isLowTax = item.price < 1000;
+        const taxRatePercent = isLowTax ? 5 : 12;
+
+        if (!hsnGroups[itemHsn]) {
+          hsnGroups[itemHsn] = {
+            hsn: itemHsn,
+            taxableValue: 0,
+            taxRate: taxRatePercent,
+            cgst: 0,
+            sgst: 0,
+            total: 0
+          };
+        }
+
+        const group = hsnGroups[itemHsn];
+        group.taxableValue += taxable;
+        group.cgst += item.cgst;
+        group.sgst += item.sgst;
+        group.total += (taxable + item.cgst + item.sgst);
+      });
+
+      htmlContent += `
+        <div style="page-break-before: always; break-before: page; font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
+          <h2 style="margin: 0 0 5px 0; font-size: 16px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">TAX FILING SLIP</h2>
+          <p style="margin: 0; font-size: 9px; color: #666666;">STREET RAGE BACKOFFICE COPY</p>
+          <div style="margin: 10px 0; border-top: 1px dashed #CCCCCC; padding-top: 10px; text-align: left; font-size: 9px;">
+            <strong>Invoice Ref:</strong> ${tx.id}<br/>
+            <strong>Date:</strong> ${tx.time}<br/>
+            <strong>GSTIN:</strong> ${GSTIN}
+          </div>
+
+          <table style="width: 100%; font-size: 8px; text-align: left; margin: 15px 0; border-collapse: collapse;">
+            <thead>
+              <tr style="border-b: 1px solid #CCCCCC; font-weight: bold;">
+                <th style="padding: 4px 0;">HSN</th>
+                <th style="padding: 4px 0; text-align: right;">Taxable (₹)</th>
+                <th style="padding: 4px 0; text-align: right;">Rate</th>
+                <th style="padding: 4px 0; text-align: right;">CGST (₹)</th>
+                <th style="padding: 4px 0; text-align: right;">SGST (₹)</th>
+                <th style="padding: 4px 0; text-align: right;">Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${Object.values(hsnGroups).map(group => `
+                <tr style="border-b: 1px solid #EAEAEA;">
+                  <td style="padding: 6px 0; font-weight: bold;">${group.hsn}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.taxableValue.toFixed(2)}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.taxRate}%</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.cgst.toFixed(2)}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.sgst.toFixed(2)}</td>
+                  <td style="padding: 6px 0; text-align: right;">${group.total.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div style="border-top: 1px solid #CCCCCC; padding-top: 8px; font-size: 9px; line-height: 1.5; text-align: left;">
+            <div style="display: flex; justify-content: space-between;">
+              <span>Total Taxable Amount:</span>
+              <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Total CGST Collected:</span>
+              <span>₹${cgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span>Total SGST Collected:</span>
+              <span>₹${sgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: bold; border-top: 1px solid #141414; padding-top: 5px; margin-top: 5px;">
+              <span>Total Tax Collected:</span>
+              <span>₹${(cgst + sgst).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          </div>
+          <p style="margin: 25px 0 0 0; font-size: 8px; color: #999999; text-transform: uppercase; letter-spacing: 1px;">SLIP END - RETAIN FOR AUDIT</p>
+        </div>
+      `;
+    }
+
+    printEl.innerHTML = htmlContent;
+
+    const styleEl = document.createElement('style');
+    styleEl.innerHTML = `@page { size: 80mm 200mm; margin: 0; }`;
+
+    document.body.appendChild(printEl);
+    document.head.appendChild(styleEl);
+
+    window.print();
+
+    setTimeout(() => {
+      document.body.removeChild(printEl);
+      document.head.removeChild(styleEl);
+    }, 500);
+  };
 
   return (
     <div className="flex h-full w-full bg-[#FAFAFA]">
@@ -262,7 +492,7 @@ export function POS() {
 
         <div className="p-6 bg-[#FAFAFA] border-t border-[#E4E3E0]">
           {/* Bill Type Selector */}
-          <div className="flex items-center justify-between mb-4 bg-white p-2.5 rounded-lg border border-[#E4E3E0]">
+          <div className="flex items-center justify-between mb-3 bg-white p-2.5 rounded-lg border border-[#E4E3E0]">
             <span className="text-xs font-semibold text-[#141414] uppercase tracking-wider">Bill Type</span>
             <div className="flex gap-1 bg-[#FAFAFA] p-0.5 rounded border border-[#E4E3E0]">
               <button
@@ -282,11 +512,64 @@ export function POS() {
             </div>
           </div>
 
+          {/* Discount Section */}
+          <div className="mb-4 bg-white p-2.5 rounded-lg border border-[#E4E3E0] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#141414] uppercase tracking-wider">Discount</span>
+              <div className="flex gap-1 bg-[#FAFAFA] p-0.5 rounded border border-[#E4E3E0]">
+                <button
+                  type="button"
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded transition-all ${discountType === 'percentage' ? 'bg-[#141414] text-white font-bold' : 'text-[#666666] hover:text-[#141414]'}`}
+                  onClick={() => {
+                    setDiscountType('percentage');
+                    setDiscountValue(0);
+                  }}
+                >
+                  %
+                </button>
+                <button
+                  type="button"
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded transition-all ${discountType === 'flat' ? 'bg-[#141414] text-white font-bold' : 'text-[#666666] hover:text-[#141414]'}`}
+                  onClick={() => {
+                    setDiscountType('flat');
+                    setDiscountValue(0);
+                  }}
+                >
+                  Flat (₹)
+                </button>
+              </div>
+            </div>
+            <Input
+              type="number"
+              min="0"
+              max={discountType === 'percentage' ? 100 : undefined}
+              value={discountValue || ""}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value) || 0;
+                setDiscountValue(val >= 0 ? val : 0);
+              }}
+              placeholder={discountType === 'percentage' ? "Enter percentage (e.g. 10)" : "Enter amount (e.g. 500)"}
+              className="h-8 text-xs font-mono border-[#E4E3E0]"
+            />
+          </div>
+
           <div className="space-y-2 mb-6">
             <div className="flex justify-between text-sm text-[#666666]">
               <span>Subtotal</span>
               <span className="font-mono">₹{billDetails.subtotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
             </div>
+            {billDetails.totalDiscount > 0 && (
+              <>
+                <div className="flex justify-between text-sm text-emerald-600">
+                  <span>Discount ({discountType === 'percentage' ? `${discountValue}%` : 'Flat'})</span>
+                  <span className="font-mono">-₹{billDetails.totalDiscount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                </div>
+                <div className="flex justify-between text-sm text-[#666666]">
+                  <span>Taxable Subtotal</span>
+                  <span className="font-mono">₹{billDetails.discountedSubtotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-sm text-[#666666]">
               <span>CGST</span>
               <span className="font-mono">₹{billDetails.totalCgst.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
@@ -520,9 +803,7 @@ export function POS() {
                 className="w-1/2 border-[#E4E3E0] text-[#666666] hover:bg-[#FAFAFA] hover:text-[#141414] py-6 uppercase tracking-widest text-xs"
                 onClick={() => {
                   setLinkedCustomer(null);
-                  const newInvoiceId = `INV-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, '0')}-${String(Math.floor(Math.random()*1000)).padStart(3, '0')}`;
-                  
-                  const newTx: Transaction = {
+                  const newInvoiceId = `INV-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, '0')}-${String(Math.floor(Math.random()*1000)).padStart(3, '0')}`;                   const newTx: Transaction = {
                     id: newInvoiceId,
                     type: "offline",
                     time: new Date().toLocaleString(),
@@ -531,6 +812,13 @@ export function POS() {
                     status: "Completed",
                     customer: "Walk-in Customer",
                     paymentMode: paymentMode,
+                    discount: billDetails.totalDiscount,
+                    discountType: discountType,
+                    discountValue: discountValue,
+                    subtotal: billDetails.subtotal,
+                    cgst: billDetails.totalCgst,
+                    sgst: billDetails.totalSgst,
+                    isGst: isGstBill,
                     itemsList: billDetails.items.map(item => ({
                       id: item.id,
                       name: item.name,
@@ -559,6 +847,7 @@ export function POS() {
 
                   // Firebase DB updates
                   saveTransactionToFirebase(newTx);
+                  setCurrentTransaction(newTx);
 
                   setIsCustomerModalOpen(false);
                   setIsReceiptModalOpen(true);
@@ -592,9 +881,7 @@ export function POS() {
                   }
 
                   // Generate Bill & Update Inventory
-                  const newInvoiceId = `INV-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, '0')}-${String(Math.floor(Math.random()*1000)).padStart(3, '0')}`;
-                  
-                  const newTx: Transaction = {
+                  const newInvoiceId = `INV-${new Date().getFullYear()}${String(new Date().getMonth()+1).padStart(2, '0')}-${String(Math.floor(Math.random()*1000)).padStart(3, '0')}`;                   const newTx: Transaction = {
                     id: newInvoiceId,
                     type: "offline",
                     time: new Date().toLocaleString(),
@@ -603,6 +890,13 @@ export function POS() {
                     status: "Completed",
                     customer: finalCustomer ? finalCustomer.name : undefined,
                     paymentMode: paymentMode,
+                    discount: billDetails.totalDiscount,
+                    discountType: discountType,
+                    discountValue: discountValue,
+                    subtotal: billDetails.subtotal,
+                    cgst: billDetails.totalCgst,
+                    sgst: billDetails.totalSgst,
+                    isGst: isGstBill,
                     itemsList: billDetails.items.map(item => ({
                       id: item.id,
                       name: item.name,
@@ -641,6 +935,7 @@ export function POS() {
                   if (finalCustomer) {
                     saveCustomerToFirebase(finalCustomer);
                   }
+                  setCurrentTransaction(newTx);
 
                   setIsCustomerModalOpen(false);
                   setIsReceiptModalOpen(true);
@@ -658,7 +953,7 @@ export function POS() {
           <DialogHeader>
             <DialogTitle className="sr-only">Tax Invoice</DialogTitle>
           </DialogHeader>
-          <div className="p-4" id="tax-invoice">
+          <div className="p-4" id="tax-invoice-preview">
             {/* Minimalist Receipt Design */}
             <div className="text-center mb-6">
               <h2 className="font-sans font-bold text-2xl tracking-tight mb-1 uppercase">STREET RAGE</h2>
@@ -733,9 +1028,9 @@ export function POS() {
           
           <DialogFooter className="mt-2 text-center flex-col sm:flex-col gap-2">
             <Button className="w-full bg-[#141414] text-white" onClick={() => {
-              // Trigger browser print
-              window.print();
+              handlePrintReceipt();
               setCart([]);
+              setDiscountValue(0);
               setIsReceiptModalOpen(false);
             }}>
               <Printer className="w-4 h-4 mr-2" />

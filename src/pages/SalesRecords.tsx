@@ -31,7 +31,20 @@ export function SalesRecords() {
     let subtotal = tx.subtotal || 0;
     let cgst = tx.cgst || 0;
     let sgst = tx.sgst || 0;
-    let items: { name: string; info: string; qty: number; total: number; price: number; hsn?: string }[] = [];
+    let itemDiscountsTotal = tx.discountDetails?.itemDiscount || 0;
+    let overallDiscountTotal = tx.discountDetails?.overallDiscount || 0;
+    let items: { 
+      name: string; 
+      info: string; 
+      qty: number; 
+      total: number; 
+      price: number; 
+      hsn?: string;
+      discountType?: string;
+      discountValue?: number;
+      discountAmount?: number;
+      totalDiscount?: number;
+    }[] = [];
 
     if (tx.itemsList && tx.itemsList.length > 0) {
       tx.itemsList.forEach(item => {
@@ -42,14 +55,22 @@ export function SalesRecords() {
           qty: item.quantity,
           total: itemSubtotal,
           price: item.price,
-          hsn: item.price < 1000 ? '6205' : '6206'
+          hsn: item.price < 1000 ? '6205' : '6206',
+          discountType: item.discountType,
+          discountValue: item.discountValue,
+          discountAmount: item.discountAmount,
+          totalDiscount: item.totalDiscount
         });
       });
       if (!subtotal) {
         tx.itemsList.forEach(item => {
           subtotal += item.price * item.quantity;
-          cgst += item.cgst;
-          sgst += item.sgst;
+        });
+      }
+      if (!cgst) {
+        tx.itemsList.forEach(item => {
+          cgst += item.cgst || 0;
+          sgst += item.sgst || 0;
         });
       }
     } else {
@@ -68,16 +89,17 @@ export function SalesRecords() {
       });
     }
 
-    return { subtotal, discount, cgst, sgst, items };
+    return { subtotal, discount, cgst, sgst, itemDiscountsTotal, overallDiscountTotal, items };
   };
 
   const handleReprint = (tx: Transaction) => {
-    const { subtotal, discount, cgst, sgst, items } = getTxDetails(tx);
+    const { subtotal, discount, cgst, sgst, itemDiscountsTotal, overallDiscountTotal, items } = getTxDetails(tx);
     const isGst = tx.isGst !== false;
 
     const printEl = document.createElement('div');
     printEl.id = 'tax-invoice';
-    printEl.innerHTML = `
+
+    let htmlContent = `
       <div style="font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
         <h2 style="margin: 0 0 5px 0; font-size: 20px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">STREET RAGE</h2>
         <p style="margin: 0; font-size: 10px; line-height: 1.2; color: #666666;">${STORE_ADDRESS.split(', ').join('<br/>')}</p>
@@ -103,16 +125,26 @@ export function SalesRecords() {
             </tr>
           </thead>
           <tbody>
-            ${items.map(item => `
-              <tr style="border-b: 1px solid #EAEAEA;">
-                <td style="padding: 6px 0;">
-                  <div>${item.name}</div>
-                  <div style="font-size: 8px; color: #666666;">${item.info} | HSN: ${item.hsn || '6205'}</div>
-                </td>
-                <td style="padding: 6px 0; text-align: center;">${item.qty}</td>
-                <td style="padding: 6px 0; text-align: right;">₹${item.total.toLocaleString()}</td>
-              </tr>
-            `).join('')}
+            ${items.map(item => {
+              const rawItemTotal = item.price * item.qty;
+              const hasItemDisc = item.discountValue !== undefined && item.discountValue > 0;
+              const itemDiscLabel = item.discountType === 'percentage' ? `${item.discountValue}%` : `Flat ₹${item.discountValue}`;
+              const itemDiscAmt = item.discountAmount || 0;
+              return `
+                <tr style="border-b: 1px solid #EAEAEA;">
+                  <td style="padding: 6px 0;">
+                    <div>${item.name}</div>
+                    <div style="font-size: 8px; color: #666666;">${item.info} | HSN: ${item.hsn || '6205'}</div>
+                    ${hasItemDisc ? `<div style="font-size: 8px; color: #10b981;">Disc: ${itemDiscLabel} (-₹${itemDiscAmt.toLocaleString()})</div>` : ''}
+                  </td>
+                  <td style="padding: 6px 0; text-align: center;">${item.qty}</td>
+                  <td style="padding: 6px 0; text-align: right;">
+                    ${hasItemDisc ? `<span style="text-decoration: line-through; color: #999999; font-size: 8px; margin-right: 4px;">₹${rawItemTotal.toLocaleString()}</span>` : ''}
+                    ₹${(rawItemTotal - itemDiscAmt).toLocaleString()}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
 
@@ -121,16 +153,28 @@ export function SalesRecords() {
             <span>Subtotal:</span>
             <span>₹${subtotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
           </div>
-          ${discount > 0 ? `
+          ${itemDiscountsTotal > 0 ? `
             <div style="display: flex; justify-content: space-between; color: #10b981;">
-              <span>Discount (${tx.discountType === 'percentage' ? `${tx.discountValue}%` : 'Flat'}):</span>
-              <span>-₹${discount.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; color: #666666;">
-              <span>Taxable Value:</span>
-              <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+              <span>• Product Discounts:</span>
+              <span>-₹${itemDiscountsTotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
             </div>
           ` : ''}
+          ${overallDiscountTotal > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #10b981;">
+              <span>• Invoice Discount (${tx.discountType === 'percentage' ? `${tx.discountValue}%` : 'Flat'}):</span>
+              <span>-₹${overallDiscountTotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          ` : ''}
+          ${discount > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #10b981; font-weight: bold; border-top: 1px dashed #EAEAEA; margin-top: 2px; padding-top: 2px;">
+              <span>Total Discount:</span>
+              <span>-₹${discount.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; color: #666666; ${discount > 0 ? '' : 'border-top: 1px dashed #EAEAEA; margin-top: 2px; padding-top: 2px;'}">
+            <span>Taxable Value:</span>
+            <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+          </div>
           <div style="display: flex; justify-content: space-between; color: #666666;">
             <span>CGST:</span>
             <span>₹${cgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
@@ -159,15 +203,14 @@ export function SalesRecords() {
         total: number;
       }> = {};
 
-      const discountRatio = subtotal > 0 ? (discount / subtotal) : 0;
-
       items.forEach(item => {
         const itemHsn = item.hsn || '6205';
-        const rawItemSubtotal = item.total;
-        const itemDiscount = Math.round(rawItemSubtotal * discountRatio * 100) / 100;
-        const taxable = Math.max(0, rawItemSubtotal - itemDiscount);
+        const rawItemSubtotal = item.price * item.qty;
+        const totalItemDiscountAmount = item.totalDiscount || item.discountAmount || 0;
+        const taxable = Math.max(0, rawItemSubtotal - totalItemDiscountAmount);
 
-        const taxRatePercent = item.price < 1000 ? 5 : 12;
+        const isLowTax = item.price < 1000;
+        const taxRatePercent = isLowTax ? 5 : 12;
 
         if (!hsnGroups[itemHsn]) {
           hsnGroups[itemHsn] = {
@@ -182,18 +225,12 @@ export function SalesRecords() {
 
         const group = hsnGroups[itemHsn];
         group.taxableValue += taxable;
-        
-        // Calculate cgst and sgst for this item in the group
-        const taxRate = taxRatePercent / 100;
-        const itemCgst = Math.round(taxable * (taxRate / 2) * 100) / 100;
-        const itemSgst = Math.round(taxable * (taxRate / 2) * 100) / 100;
-        
-        group.cgst += itemCgst;
-        group.sgst += itemSgst;
-        group.total += (taxable + itemCgst + itemSgst);
+        group.cgst += item.cgst || 0;
+        group.sgst += item.sgst || 0;
+        group.total += (taxable + (item.cgst || 0) + (item.sgst || 0));
       });
 
-      printEl.innerHTML += `
+      htmlContent += `
         <div style="page-break-before: always; break-before: page; font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
           <h2 style="margin: 0 0 5px 0; font-size: 16px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">TAX FILING SLIP</h2>
           <p style="margin: 0; font-size: 9px; color: #666666;">STREET RAGE BACKOFFICE COPY</p>
@@ -250,6 +287,8 @@ export function SalesRecords() {
         </div>
       `;
     }
+
+    printEl.innerHTML = htmlContent;
 
     const styleEl = document.createElement('style');
     styleEl.innerHTML = `@page { size: 80mm 200mm; margin: 0; }`;
@@ -382,7 +421,7 @@ export function SalesRecords() {
           </div>
           
           {selectedTx && (() => {
-            const { subtotal, cgst, sgst, items } = getTxDetails(selectedTx);
+            const { subtotal, discount, cgst, sgst, itemDiscountsTotal, overallDiscountTotal, items } = getTxDetails(selectedTx);
             return (
               <div className="p-6 space-y-6">
                 {/* Receipt Mock Preview */}
@@ -410,23 +449,59 @@ export function SalesRecords() {
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((item, idx) => (
-                        <tr key={idx} className="border-b border-[#F0F0F0] last:border-0">
-                          <td className="py-2">
-                            <div className="font-sans font-medium">{item.name}</div>
-                            <div className="text-[10px] text-[#666666]">{item.info}</div>
-                          </td>
-                          <td className="py-2 text-center">{item.qty}</td>
-                          <td className="py-2 text-right">₹{item.total.toLocaleString()}</td>
-                        </tr>
-                      ))}
+                      {items.map((item, idx) => {
+                        const rawItemTotal = item.price * item.qty;
+                        const hasItemDisc = item.discountValue !== undefined && item.discountValue > 0;
+                        const itemDiscLabel = item.discountType === 'percentage' ? `${item.discountValue}%` : `Flat ₹${item.discountValue}`;
+                        const itemDiscAmt = item.discountAmount || 0;
+                        return (
+                          <tr key={idx} className="border-b border-[#F0F0F0] last:border-0">
+                            <td className="py-2">
+                              <div className="font-sans font-medium">{item.name}</div>
+                              <div className="text-[10px] text-[#666666]">{item.info}</div>
+                              {hasItemDisc && (
+                                <div className="text-[9px] text-emerald-600 font-medium">Disc: {itemDiscLabel} (-₹{itemDiscAmt.toLocaleString()})</div>
+                              )}
+                            </td>
+                            <td className="py-2 text-center">{item.qty}</td>
+                            <td className="py-2 text-right">
+                              {hasItemDisc && (
+                                <span className="text-decoration: line-through text-[#999999] text-[9px] mr-2">₹{rawItemTotal.toLocaleString()}</span>
+                              )}
+                              ₹{(rawItemTotal - itemDiscAmt).toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
 
                   <div className="border-t border-[#CCCCCC] pt-3 space-y-1 font-mono text-xs text-[#666666]">
                     <div className="flex justify-between">
-                      <span>Taxable Value:</span>
+                      <span>Subtotal:</span>
                       <span>₹{subtotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                    </div>
+                    {itemDiscountsTotal > 0 && (
+                      <div className="flex justify-between text-emerald-600">
+                        <span>• Product Discounts:</span>
+                        <span>-₹{itemDiscountsTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    )}
+                    {overallDiscountTotal > 0 && (
+                      <div className="flex justify-between text-emerald-600">
+                        <span>• Invoice Discount (${selectedTx.discountType === 'percentage' ? `${selectedTx.discountValue}%` : 'Flat'}):</span>
+                        <span>-₹{overallDiscountTotal.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    )}
+                    {discount > 0 && (
+                      <div className="flex justify-between text-emerald-600 font-bold border-t border-dashed border-[#EAEAEA] pt-1">
+                        <span>Total Discount:</span>
+                        <span>-₹{discount.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t border-dashed border-[#EAEAEA] pt-1">
+                      <span>Taxable Value:</span>
+                      <span>₹{(subtotal - discount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>CGST:</span>

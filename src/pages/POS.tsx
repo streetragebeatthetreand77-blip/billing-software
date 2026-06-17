@@ -15,12 +15,27 @@ interface CartItem extends Product {
   selectedSize: string;
   selectedColor: string;
   quantity: number;
+  discountType?: 'percentage' | 'flat';
+  discountValue?: number;
 }
 
 export function POS() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [cart, setCart] = useState<CartItem[]>([]);
+  
+  const updateItemDiscount = (cartItemId: string, type: 'percentage' | 'flat', value: number) => {
+    setCart(prevCart => prevCart.map(item => {
+      if (item.cartItemId === cartItemId) {
+        return {
+          ...item,
+          discountType: type,
+          discountValue: value
+        };
+      }
+      return item;
+    }));
+  };
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [sizeSelection, setSizeSelection] = useState<string>("");
   const [colorSelection, setColorSelection] = useState<string>("");
@@ -116,35 +131,57 @@ export function POS() {
   // Tax calculation
   const billDetails = useMemo(() => {
     let subtotalRaw = 0;
-    
-    // Calculate raw subtotal first
-    cart.forEach(item => {
-      subtotalRaw += item.price * item.quantity;
+    let totalItemDiscount = 0;
+    let subtotalAfterItemDiscounts = 0;
+
+    // Calculate raw item subtotals and item-level discounts
+    const itemsWithItemDiscount = cart.map(item => {
+      const itemSubtotal = item.price * item.quantity;
+      const itemDiscountVal = item.discountValue || 0;
+      const itemDiscountType = item.discountType || 'percentage';
+      
+      let itemDiscount = 0;
+      if (itemDiscountType === 'percentage') {
+        itemDiscount = Math.round(itemSubtotal * (itemDiscountVal / 100) * 100) / 100;
+      } else {
+        itemDiscount = itemDiscountVal;
+      }
+      itemDiscount = Math.min(itemDiscount, itemSubtotal);
+      
+      const itemSubtotalAfterDiscount = itemSubtotal - itemDiscount;
+      
+      subtotalRaw += itemSubtotal;
+      totalItemDiscount += itemDiscount;
+      subtotalAfterItemDiscounts += itemSubtotalAfterDiscount;
+
+      return {
+        ...item,
+        itemSubtotal,
+        itemDiscount,
+        itemSubtotalAfterDiscount
+      };
     });
 
-    // Calculate discount amount
-    let discountAmount = 0;
+    // Calculate overall invoice discount amount
+    let overallDiscountAmount = 0;
     if (discountType === 'percentage') {
-      discountAmount = Math.round((subtotalRaw * (discountValue / 100)) * 100) / 100;
+      overallDiscountAmount = Math.round(subtotalAfterItemDiscounts * (discountValue / 100) * 100) / 100;
     } else {
-      discountAmount = discountValue;
+      overallDiscountAmount = discountValue;
     }
-    // Cap discount at subtotalRaw
-    if (discountAmount > subtotalRaw) {
-      discountAmount = subtotalRaw;
-    }
+    overallDiscountAmount = Math.min(overallDiscountAmount, subtotalAfterItemDiscounts);
 
-    // Proportional discount ratio
-    const discountRatio = subtotalRaw > 0 ? (discountAmount / subtotalRaw) : 0;
+    // Proportional overall discount ratio
+    const overallDiscountRatio = subtotalAfterItemDiscounts > 0 ? (overallDiscountAmount / subtotalAfterItemDiscounts) : 0;
 
     let discountedSubtotalRaw = 0;
     let cgstRaw = 0;
     let sgstRaw = 0;
 
-    const items = cart.map(item => {
-      const itemSubtotal = item.price * item.quantity;
-      const itemDiscount = Math.round(itemSubtotal * discountRatio * 100) / 100;
-      const itemDiscountedSubtotal = Math.max(0, itemSubtotal - itemDiscount);
+    const items = itemsWithItemDiscount.map(item => {
+      // Allocate overall invoice discount proportionally
+      const allocatedOverallDiscount = Math.round(item.itemSubtotalAfterDiscount * overallDiscountRatio * 100) / 100;
+      const itemDiscountedSubtotal = Math.max(0, item.itemSubtotalAfterDiscount - allocatedOverallDiscount);
       discountedSubtotalRaw += itemDiscountedSubtotal;
 
       // GST rule: < 1000 is 5% (2.5 + 2.5), >= 1000 is 12% (6 + 6)
@@ -161,23 +198,35 @@ export function POS() {
 
       return {
         ...item,
-        itemSubtotal,
-        itemDiscount,
+        totalItemDiscount: item.itemDiscount + allocatedOverallDiscount,
+        itemDiscountAmount: item.itemDiscount,
+        allocatedOverallDiscount,
         itemDiscountedSubtotal,
         taxRate: taxRate * 100,
         cgstAmount,
-        sgstAmount
+        sgstAmount,
+        hsn: isLowTax ? '6205' : '6206'
       };
     });
 
     const subtotal = Math.round(subtotalRaw * 100) / 100;
-    const totalDiscount = Math.round(discountAmount * 100) / 100;
+    const totalDiscount = Math.round((totalItemDiscount + overallDiscountAmount) * 100) / 100;
     const discountedSubtotal = Math.round(discountedSubtotalRaw * 100) / 100;
     const totalCgst = Math.round(cgstRaw * 100) / 100;
     const totalSgst = Math.round(sgstRaw * 100) / 100;
     const total = Math.round((discountedSubtotal + totalCgst + totalSgst) * 100) / 100;
 
-    return { items, subtotal, totalDiscount, discountedSubtotal, totalCgst, totalSgst, total };
+    return { 
+      items, 
+      subtotal, 
+      totalItemDiscount: Math.round(totalItemDiscount * 100) / 100,
+      totalOverallDiscount: Math.round(overallDiscountAmount * 100) / 100,
+      totalDiscount, 
+      discountedSubtotal, 
+      totalCgst, 
+      totalSgst, 
+      total 
+    };
   }, [cart, discountType, discountValue, isGstBill]);
 
   const handlePrintReceipt = () => {
@@ -193,6 +242,9 @@ export function POS() {
 
     const printEl = document.createElement('div');
     printEl.id = 'tax-invoice';
+
+    const itemDiscountsTotal = tx.discountDetails?.itemDiscount || 0;
+    const overallDiscountTotal = tx.discountDetails?.overallDiscount || 0;
 
     let htmlContent = `
       <div style="font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
@@ -220,16 +272,26 @@ export function POS() {
             </tr>
           </thead>
           <tbody>
-            ${(tx.itemsList || []).map(item => `
-              <tr style="border-b: 1px solid #EAEAEA;">
-                <td style="padding: 6px 0;">
-                  <div>${item.name}</div>
-                  <div style="font-size: 8px; color: #666666;">${item.selectedSize}/${item.selectedColor} | HSN: ${item.price < 1000 ? '6205' : '6206'}</div>
-                </td>
-                <td style="padding: 6px 0; text-align: center;">${item.quantity}</td>
-                <td style="padding: 6px 0; text-align: right;">₹${(item.price * item.quantity).toLocaleString()}</td>
-              </tr>
-            `).join('')}
+            ${(tx.itemsList || []).map(item => {
+              const rawItemTotal = item.price * item.quantity;
+              const hasItemDisc = item.discountValue !== undefined && item.discountValue > 0;
+              const itemDiscLabel = item.discountType === 'percentage' ? `${item.discountValue}%` : `Flat ₹${item.discountValue}`;
+              const itemDiscAmt = item.discountAmount || 0;
+              return `
+                <tr style="border-b: 1px solid #EAEAEA;">
+                  <td style="padding: 6px 0;">
+                    <div>${item.name}</div>
+                    <div style="font-size: 8px; color: #666666;">${item.selectedSize}/${item.selectedColor} | HSN: ${item.price < 1000 ? '6205' : '6206'}</div>
+                    ${hasItemDisc ? `<div style="font-size: 8px; color: #10b981;">Disc: ${itemDiscLabel} (-₹${itemDiscAmt.toLocaleString()})</div>` : ''}
+                  </td>
+                  <td style="padding: 6px 0; text-align: center;">${item.quantity}</td>
+                  <td style="padding: 6px 0; text-align: right;">
+                    ${hasItemDisc ? `<span style="text-decoration: line-through; color: #999999; font-size: 8px; margin-right: 4px;">₹${rawItemTotal.toLocaleString()}</span>` : ''}
+                    ₹${(rawItemTotal - itemDiscAmt).toLocaleString()}
+                  </td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
 
@@ -238,16 +300,28 @@ export function POS() {
             <span>Subtotal:</span>
             <span>₹${subtotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
           </div>
-          ${discount > 0 ? `
+          ${itemDiscountsTotal > 0 ? `
             <div style="display: flex; justify-content: space-between; color: #10b981;">
-              <span>Discount (${tx.discountType === 'percentage' ? `${tx.discountValue}%` : 'Flat'}):</span>
-              <span>-₹${discount.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; color: #666666;">
-              <span>Taxable Value:</span>
-              <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+              <span>• Product Discounts:</span>
+              <span>-₹${itemDiscountsTotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
             </div>
           ` : ''}
+          ${overallDiscountTotal > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #10b981;">
+              <span>• Invoice Discount (${tx.discountType === 'percentage' ? `${tx.discountValue}%` : 'Flat'}):</span>
+              <span>-₹${overallDiscountTotal.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          ` : ''}
+          ${discount > 0 ? `
+            <div style="display: flex; justify-content: space-between; color: #10b981; font-weight: bold; border-top: 1px dashed #EAEAEA; margin-top: 2px; padding-top: 2px;">
+              <span>Total Discount:</span>
+              <span>-₹${discount.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          ` : ''}
+          <div style="display: flex; justify-content: space-between; color: #666666; ${discount > 0 ? '' : 'border-top: 1px dashed #EAEAEA; margin-top: 2px; padding-top: 2px;'}">
+            <span>Taxable Value:</span>
+            <span>₹${(subtotal - discount).toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+          </div>
           <div style="display: flex; justify-content: space-between; color: #666666;">
             <span>CGST:</span>
             <span>₹${cgst.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
@@ -276,13 +350,11 @@ export function POS() {
         total: number;
       }> = {};
 
-      const discountRatio = subtotal > 0 ? (discount / subtotal) : 0;
-
       (tx.itemsList || []).forEach(item => {
         const itemHsn = item.price < 1000 ? '6205' : '6206';
         const rawItemSubtotal = item.price * item.quantity;
-        const itemDiscount = Math.round(rawItemSubtotal * discountRatio * 100) / 100;
-        const taxable = Math.max(0, rawItemSubtotal - itemDiscount);
+        const totalItemDiscountAmount = item.totalDiscount || item.discountAmount || 0;
+        const taxable = Math.max(0, rawItemSubtotal - totalItemDiscountAmount);
 
         const isLowTax = item.price < 1000;
         const taxRatePercent = isLowTax ? 5 : 12;
@@ -480,6 +552,32 @@ export function POS() {
                         <button onClick={() => updateQuantity(item.cartItemId, 1)} className="px-2 py-0.5 text-[#666666] hover:bg-white transition-colors">+</button>
                       </div>
                     </div>
+                    {/* Item-level Discount Input */}
+                    <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-dashed border-[#F0F0F0]">
+                      <span className="text-[10px] text-muted-foreground uppercase font-medium">Item Disc:</span>
+                      <div className="flex items-center gap-1.5">
+                        <select
+                          value={item.discountType || "percentage"}
+                          onChange={(e) => updateItemDiscount(item.cartItemId, e.target.value as "percentage" | "flat", item.discountValue || 0)}
+                          className="text-[10px] font-mono border border-[#E4E3E0] rounded px-1.5 py-0.5 bg-white text-[#141414]"
+                        >
+                          <option value="percentage">%</option>
+                          <option value="flat">₹</option>
+                        </select>
+                        <Input
+                          type="number"
+                          min="0"
+                          max={item.discountType === 'percentage' ? 100 : undefined}
+                          value={item.discountValue || ""}
+                          placeholder="0"
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            updateItemDiscount(item.cartItemId, item.discountType || "percentage", val >= 0 ? val : 0);
+                          }}
+                          className="h-6 w-20 text-[10px] font-mono border-[#E4E3E0] p-1 text-center bg-white"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <button onClick={() => removeCartItem(item.cartItemId)} className="opacity-0 group-hover:opacity-100 p-1 text-[#999999] hover:text-red-500 transition-all">
                     <X className="w-4 h-4" />
@@ -558,10 +656,22 @@ export function POS() {
               <span>Subtotal</span>
               <span className="font-mono">₹{billDetails.subtotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
             </div>
-            {billDetails.totalDiscount > 0 && (
+            {(billDetails.totalItemDiscount > 0 || billDetails.totalOverallDiscount > 0) && (
               <>
-                <div className="flex justify-between text-sm text-emerald-600">
-                  <span>Discount ({discountType === 'percentage' ? `${discountValue}%` : 'Flat'})</span>
+                {billDetails.totalItemDiscount > 0 && (
+                  <div className="flex justify-between text-xs text-emerald-600 pl-2">
+                    <span>• Product Discounts</span>
+                    <span className="font-mono">-₹{billDetails.totalItemDiscount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                {billDetails.totalOverallDiscount > 0 && (
+                  <div className="flex justify-between text-xs text-emerald-600 pl-2">
+                    <span>• Invoice Discount ({discountType === 'percentage' ? `${discountValue}%` : 'Flat'})</span>
+                    <span className="font-mono">-₹{billDetails.totalOverallDiscount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm text-emerald-700 font-medium border-t border-dashed border-[#E4E3E0] pt-1">
+                  <span>Total Discount</span>
                   <span className="font-mono">-₹{billDetails.totalDiscount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                 </div>
                 <div className="flex justify-between text-sm text-[#666666]">
@@ -819,6 +929,10 @@ export function POS() {
                     cgst: billDetails.totalCgst,
                     sgst: billDetails.totalSgst,
                     isGst: isGstBill,
+                    discountDetails: {
+                      itemDiscount: billDetails.totalItemDiscount,
+                      overallDiscount: billDetails.totalOverallDiscount
+                    },
                     itemsList: billDetails.items.map(item => ({
                       id: item.id,
                       name: item.name,
@@ -827,7 +941,11 @@ export function POS() {
                       quantity: item.quantity,
                       price: item.price,
                       cgst: item.cgstAmount,
-                      sgst: item.sgstAmount
+                      sgst: item.sgstAmount,
+                      discountType: item.discountType,
+                      discountValue: item.discountValue,
+                      discountAmount: item.itemDiscount,
+                      totalDiscount: item.totalItemDiscount
                     }))
                   };
                   mockTransactions.unshift(newTx);
@@ -897,6 +1015,10 @@ export function POS() {
                     cgst: billDetails.totalCgst,
                     sgst: billDetails.totalSgst,
                     isGst: isGstBill,
+                    discountDetails: {
+                      itemDiscount: billDetails.totalItemDiscount,
+                      overallDiscount: billDetails.totalOverallDiscount
+                    },
                     itemsList: billDetails.items.map(item => ({
                       id: item.id,
                       name: item.name,
@@ -905,7 +1027,11 @@ export function POS() {
                       quantity: item.quantity,
                       price: item.price,
                       cgst: item.cgstAmount,
-                      sgst: item.sgstAmount
+                      sgst: item.sgstAmount,
+                      discountType: item.discountType,
+                      discountValue: item.discountValue,
+                      discountAmount: item.itemDiscount,
+                      totalDiscount: item.totalItemDiscount
                     }))
                   };
                   mockTransactions.unshift(newTx);
@@ -987,23 +1113,58 @@ export function POS() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EAEAEA]">
-                  {billDetails.items.map(item => (
-                    <tr key={item.cartItemId}>
-                      <td className="py-3">
-                        <div className="font-sans font-medium line-clamp-1">{item.name}</div>
-                        <div className="text-[10px] text-[#666666]">{item.selectedSize}/{item.selectedColor} | HSN: {item.hsn}</div>
-                      </td>
-                      <td className="py-3 text-center">{item.quantity}</td>
-                      <td className="py-3 text-right">₹{item.itemSubtotal.toLocaleString()}</td>
-                    </tr>
-                  ))}
+                  {billDetails.items.map(item => {
+                    const rawItemTotal = item.price * item.quantity;
+                    const hasItemDisc = item.discountValue !== undefined && item.discountValue > 0;
+                    const itemDiscLabel = item.discountType === 'percentage' ? `${item.discountValue}%` : `Flat ₹${item.discountValue}`;
+                    return (
+                      <tr key={item.cartItemId}>
+                        <td className="py-3">
+                          <div className="font-sans font-medium line-clamp-1">{item.name}</div>
+                          <div className="text-[10px] text-[#666666]">{item.selectedSize}/{item.selectedColor} | HSN: {item.hsn}</div>
+                          {hasItemDisc && (
+                            <div className="text-[9px] text-emerald-600 font-medium">Disc: {itemDiscLabel} (-₹{item.itemDiscount.toLocaleString()})</div>
+                          )}
+                        </td>
+                        <td className="py-3 text-center">{item.quantity}</td>
+                        <td className="py-3 text-right">
+                          {hasItemDisc && (
+                            <span className="text-decoration: line-through text-[#999999] text-[9px] mr-2">₹{rawItemTotal.toLocaleString()}</span>
+                          )}
+                          ₹{(rawItemTotal - item.itemDiscount).toLocaleString()}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
               <div className="border-t border-[#CCCCCC] pt-3 pb-3 space-y-1">
                 <div className="flex justify-between text-xs font-mono">
-                  <span className="text-[#666666]">Taxable Amount</span>
+                  <span className="text-[#666666]">Subtotal</span>
                   <span>₹{billDetails.subtotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                </div>
+                {billDetails.totalItemDiscount > 0 && (
+                  <div className="flex justify-between text-xs font-mono text-emerald-600">
+                    <span>• Product Discounts</span>
+                    <span>-₹{billDetails.totalItemDiscount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                {billDetails.totalOverallDiscount > 0 && (
+                  <div className="flex justify-between text-xs font-mono text-emerald-600">
+                    <span>• Invoice Discount</span>
+                    <span>-₹{billDetails.totalOverallDiscount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                {billDetails.totalDiscount > 0 && (
+                  <div className="flex justify-between text-xs font-mono text-emerald-600 font-bold border-t border-dashed border-[#EAEAEA] pt-1">
+                    <span>Total Discount</span>
+                    <span>-₹{billDetails.totalDiscount.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs font-mono border-t border-dashed border-[#EAEAEA] pt-1">
+                  <span className="text-[#666666]">Taxable Amount</span>
+                  <span>₹{billDetails.discountedSubtotal.toLocaleString('en-IN', {minimumFractionDigits: 2})}</span>
                 </div>
                 <div className="flex justify-between text-xs font-mono text-[#666666]">
                   <span>CGST</span>

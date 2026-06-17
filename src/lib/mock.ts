@@ -20,6 +20,10 @@ export interface TransactionItem {
   price: number;
   cgst: number;
   sgst: number;
+  discountType?: "percentage" | "flat";
+  discountValue?: number;
+  discountAmount?: number;
+  totalDiscount?: number;
 }
 
 export interface Transaction {
@@ -39,6 +43,10 @@ export interface Transaction {
   cgst?: number;
   sgst?: number;
   isGst?: boolean;
+  discountDetails?: {
+    itemDiscount: number;
+    overallDiscount: number;
+  };
 }
 
 export interface Customer {

@@ -59,16 +59,20 @@ export function Dashboard() {
     } else {
       printEl.id = 'barcode-sticker';
       printEl.innerHTML = `
-        <div style="font-family: monospace; text-align: center; font-size: 10px; width: 50mm; height: 25mm; display: flex; flex-direction: column; align-items: center; justify-content: center; background: white; color: black; box-sizing: border-box; padding: 2px;">
-          <div style="font-size: 9px; font-weight: bold; letter-spacing: 0.5px;">STREET RAGE</div>
-          <div class="font-barcode" style="font-size: 38px; margin: 1px 0; line-height: 1; font-family: 'Libre Barcode 128', sans-serif;">*SR-TEST-OK*</div>
-          <div style="font-size: 8px; letter-spacing: 1.5px; font-family: monospace;">SR-TEST-OK</div>
+      <div style="font-family: monospace; text-align: center; font-size: 12px; width: 50mm; height: 50mm; display: flex; flex-direction: column; align-items: center; justify-content: space-between; background: white; color: black; box-sizing: border-box; padding: 8px 2px 8px 2px;">
+        <div style="font-size: 11px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #141414; width: 44mm; padding-bottom: 2px;">STREET RAGE</div>
+        <div style="font-size: 10px; margin-top: 2px; color: #141414; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 44mm;">TEST STICKER</div>
+        <div style="height: 14mm; display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 2px 0; width: 44mm;">
+          <div class="font-barcode" style="font-size: 42px; line-height: 1.2; font-family: 'Libre Barcode 128', sans-serif;">*SR-TEST-OK*</div>
         </div>
+        <div style="font-size: 9px; letter-spacing: 1px; font-family: monospace; font-weight: bold; color: #666666;">SR-TEST-OK</div>
+        <div style="font-size: 12px; font-weight: bold; border-top: 1px dashed #666666; width: 44mm; padding-top: 4px;">READY</div>
+      </div>
       `;
     }
 
     const styleEl = document.createElement('style');
-    styleEl.innerHTML = `@page { size: ${type === 'receipt' ? '80mm 200mm' : '50mm 25mm'}; margin: 0; }`;
+    styleEl.innerHTML = `@page { size: ${type === 'receipt' ? '80mm 200mm' : '50mm 50mm'}; margin: 0; }`;
 
     document.body.appendChild(printEl);
     document.head.appendChild(styleEl);

@@ -4,7 +4,6 @@ import { Card } from "@/components/ui/card";
 import { ArrowUpRight, Package, Store, Cpu } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
-import { clearAllFirebaseData } from "@/lib/db";
 
 export function Dashboard() {
   const { user } = useAuth();
@@ -117,24 +116,6 @@ export function Dashboard() {
           <h1 className="font-sans text-4xl tracking-tight text-[#141414] font-light">Retail <span className="font-medium">Dashboard</span></h1>
         </div>
         <div className="flex items-end gap-4">
-          {isAdmin && (
-            <button
-              onClick={async () => {
-                if (confirm("WARNING: Are you sure you want to completely clear all data from Firebase? This will delete all products, transactions, customers, and returns, and cannot be undone.")) {
-                  try {
-                    await clearAllFirebaseData();
-                    alert("Database cleared successfully! The page will now reload.");
-                    window.location.reload();
-                  } catch (e) {
-                    alert("Failed to clear database: " + e);
-                  }
-                }
-              }}
-              className="text-[10px] bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 px-3 py-1.5 rounded-lg font-mono uppercase tracking-wider font-semibold transition-all shadow-sm"
-            >
-              Reset Firebase
-            </button>
-          )}
           <div className="text-right">
             <div className="font-mono text-xs text-muted-foreground uppercase">Live status</div>
             <div className="flex items-center gap-2 text-sm text-emerald-600 font-medium mt-1">

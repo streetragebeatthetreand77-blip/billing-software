@@ -1,4 +1,5 @@
 import { mockTransactions, mockProducts } from "@/lib/mock";
+import JsBarcode from "jsbarcode";
 import { Card } from "@/components/ui/card";
 import { ArrowUpRight, Package, Store, Cpu } from "lucide-react";
 import { motion } from "framer-motion";
@@ -62,8 +63,8 @@ export function Dashboard() {
       <div style="font-family: monospace; text-align: center; font-size: 12px; width: 50mm; height: 50mm; display: flex; flex-direction: column; align-items: center; justify-content: space-between; background: white; color: black; box-sizing: border-box; padding: 8px 2px 8px 2px;">
         <div style="font-size: 11px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #141414; width: 44mm; padding-bottom: 2px;">STREET RAGE</div>
         <div style="font-size: 10px; margin-top: 2px; color: #141414; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 44mm;">TEST STICKER</div>
-        <div style="height: 14mm; display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 2px 0; width: 44mm;">
-          <div class="font-barcode" style="font-size: 36px; line-height: 1.2; font-family: 'Libre Barcode 39', sans-serif;">*SR-TEST-OK*</div>
+        <div style="height: 16mm; display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 2px 0; width: 44mm;">
+          <svg id="barcode-svg" style="max-width: 100%; height: auto;"></svg>
         </div>
         <div style="font-size: 9px; letter-spacing: 1px; font-family: monospace; font-weight: bold; color: #666666;">SR-TEST-OK</div>
         <div style="font-size: 12px; font-weight: bold; border-top: 1px dashed #666666; width: 44mm; padding-top: 4px;">READY</div>
@@ -76,6 +77,24 @@ export function Dashboard() {
 
     document.body.appendChild(printEl);
     document.head.appendChild(styleEl);
+
+    if (type === 'barcode') {
+      try {
+        const svgEl = printEl.querySelector('#barcode-svg');
+        if (svgEl) {
+          JsBarcode(svgEl, "SR-TEST-OK", {
+            format: "CODE128",
+            width: 1.8,
+            height: 40,
+            displayValue: false,
+            margin: 0,
+            background: "transparent"
+          });
+        }
+      } catch (err) {
+        console.error("Test barcode generation error:", err);
+      }
+    }
 
     window.print();
 

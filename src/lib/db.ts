@@ -122,3 +122,22 @@ export async function saveReturnToFirebase(ret: any) {
     console.error("Firebase Save Return Error:", err);
   }
 }
+
+export async function clearAllFirebaseData() {
+  const db = await getDb();
+  if (!db || !firestoreModule) return;
+  try {
+    const { collection, getDocs, deleteDoc, doc } = firestoreModule;
+    const collections = ["products", "transactions", "customers", "returns"];
+    for (const colName of collections) {
+      const snap = await getDocs(collection(db, colName));
+      const deletePromises = snap.docs.map(async (d: any) => {
+        await deleteDoc(doc(db, colName, d.id));
+      });
+      await Promise.all(deletePromises);
+    }
+  } catch (err) {
+    console.error("Firebase Database Clear Error:", err);
+    throw err;
+  }
+}

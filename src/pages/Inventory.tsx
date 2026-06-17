@@ -621,11 +621,8 @@ function ProductForm({
     try {
       const svgEl = printEl.querySelector('#barcode-svg');
       if (svgEl) {
-        const isNumeric = /^\d+$/.test(p.id);
-        const format = (isNumeric && (p.id.length === 13 || p.id.length === 8)) ? (p.id.length === 13 ? "EAN13" : "EAN8") : "CODE128";
-        
         JsBarcode(svgEl, p.id, {
-          format: format,
+          format: "CODE128",
           width: 1.8,
           height: 40,
           displayValue: false,

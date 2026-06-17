@@ -190,12 +190,14 @@ body {
     }
 }
 
+
+
 @media print {
   @page {
     margin: 0;
   }
-  body * {
-    visibility: hidden !important;
+  #root {
+    display: none !important;
   }
   #tax-invoice, #tax-invoice * {
     visibility: visible !important;
@@ -204,11 +206,8 @@ body {
     box-sizing: border-box !important;
   }
   #tax-invoice {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    max-width: 80mm !important;
+    display: block !important;
+    width: 80mm !important;
     margin: 0 !important;
     padding: 10px 16px 10px 16px !important;
     background: white !important;
@@ -219,18 +218,12 @@ body {
     color: #000000 !important;
   }
   #barcode-sticker {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
+    display: flex !important;
+    width: 50mm !important;
+    height: 50mm !important;
     margin: 0 !important;
     padding: 2mm !important;
     background: white !important;
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
     box-sizing: border-box !important;
   }
 }

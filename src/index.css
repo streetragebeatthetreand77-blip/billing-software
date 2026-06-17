@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&family=Libre+Barcode+128&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&family=Libre+Barcode+39&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -8,7 +8,7 @@
 }
 
 .font-barcode {
-  font-family: 'Libre Barcode 128', cursive, sans-serif;
+  font-family: 'Libre Barcode 39', cursive, sans-serif;
   font-size: 48px;
 }
 

@@ -603,7 +603,7 @@ function ProductForm({
         <div style="font-size: 11px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #141414; width: 44mm; padding-bottom: 2px;">STREET RAGE</div>
         <div style="font-size: 10px; margin-top: 2px; color: #141414; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 44mm;">${p.name}</div>
         <div style="height: 14mm; display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 2px 0; width: 44mm;">
-          <div class="font-barcode" style="font-size: 42px; line-height: 1.2; font-family: 'Libre Barcode 128', sans-serif;">*${p.id}*</div>
+          <div class="font-barcode" style="font-size: 36px; line-height: 1.2; font-family: 'Libre Barcode 39', sans-serif;">*${p.id}*</div>
         </div>
         <div style="font-size: 9px; letter-spacing: 1px; font-family: monospace; font-weight: bold; color: #666666;">${p.id}</div>
         <div style="font-size: 12px; font-weight: bold; border-top: 1px dashed #666666; width: 44mm; padding-top: 4px;">MRP: ₹${p.price.toLocaleString('en-IN')}</div>

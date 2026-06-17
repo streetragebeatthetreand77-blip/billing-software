@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Search, Printer, FileText, X, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function SalesRecords() {
   const [search, setSearch] = useState("");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [gstFilter, setGstFilter] = useState<'all' | 'gst' | 'nongst'>('all');
+  const [exportType, setExportType] = useState<'all' | 'gst' | 'nongst'>('all');
 
   const filtered = mockTransactions.filter(tx => {
     if (gstFilter === 'gst') {
@@ -306,7 +308,7 @@ export function SalesRecords() {
     }, 500);
   };
 
-  const handleExportCSV = () => {
+  const handleExportCSV = (type: 'all' | 'gst' | 'nongst') => {
     // Columns to export
     const headers = [
       "Invoice ID",
@@ -324,7 +326,23 @@ export function SalesRecords() {
       "Created By"
     ];
 
-    const rows = filtered.map(tx => {
+    const txToExport = mockTransactions.filter(tx => {
+      if (type === 'gst') {
+        if (tx.isGst === false) return false;
+      } else if (type === 'nongst') {
+        if (tx.isGst !== false) return false;
+      }
+      if (search) {
+        return (
+          tx.id.toLowerCase().includes(search.toLowerCase()) || 
+          (tx.customer && tx.customer.toLowerCase().includes(search.toLowerCase())) ||
+          tx.time.toLowerCase().includes(search.toLowerCase())
+        );
+      }
+      return true;
+    });
+
+    const rows = txToExport.map(tx => {
       const { subtotal, discount, cgst, sgst } = getTxDetails(tx);
       const isGstStr = tx.isGst !== false ? "Yes" : "No";
       const customerStr = tx.customer || "Walk-in Customer";
@@ -357,7 +375,7 @@ export function SalesRecords() {
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const filename = `sales_report_${gstFilter}_${new Date().toISOString().split('T')[0]}.csv`;
+    const filename = `sales_report_${type}_${new Date().toISOString().split('T')[0]}.csv`;
     link.setAttribute("href", url);
     link.setAttribute("download", filename);
     link.style.visibility = 'hidden';
@@ -406,13 +424,25 @@ export function SalesRecords() {
               Non-GST
             </button>
           </div>
-          <Button
-            onClick={handleExportCSV}
-            className="bg-[#141414] text-white hover:bg-[#333333] shadow-sm tracking-wider uppercase text-xs flex items-center gap-2"
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export to Excel
-          </Button>
+          <div className="flex items-center gap-2">
+            <Select value={exportType} onValueChange={(val: any) => setExportType(val)}>
+              <SelectTrigger className="w-32 bg-white text-xs font-mono h-9 border-[#E4E3E0]">
+                <SelectValue placeholder="Export Type" />
+              </SelectTrigger>
+              <SelectContent className="bg-white border-[#E4E3E0]">
+                <SelectItem value="all" className="text-xs font-mono">All Bills</SelectItem>
+                <SelectItem value="gst" className="text-xs font-mono">GST Bills</SelectItem>
+                <SelectItem value="nongst" className="text-xs font-mono">Non-GST</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              onClick={() => handleExportCSV(exportType)}
+              className="bg-[#141414] text-white hover:bg-[#333333] shadow-sm tracking-wider uppercase text-xs flex items-center gap-2 h-9"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Export to Excel
+            </Button>
+          </div>
         </div>
       </div>
 

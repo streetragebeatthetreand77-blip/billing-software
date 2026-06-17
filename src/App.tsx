@@ -159,7 +159,7 @@ function MainAppRoutes() {
             <Route path="/pos" element={<POS />} />
             <Route path="/inventory" element={isAdmin ? <Inventory /> : <Navigate to="/pos" replace />} />
             <Route path="/sales-records" element={isAdmin ? <SalesRecords /> : <Navigate to="/pos" replace />} />
-            <Route path="/customers" element={<Customers />} />
+            <Route path="/customers" element={isAdmin ? <Customers /> : <Navigate to="/pos" replace />} />
             <Route path="/returns" element={<Returns />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

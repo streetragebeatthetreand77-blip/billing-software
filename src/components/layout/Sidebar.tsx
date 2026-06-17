@@ -21,7 +21,7 @@ export function Sidebar() {
 
   const filteredLinks = links.filter(link => {
     if (!isAdmin) {
-      return ["Billing (POS)", "Customers", "Return & Exchange"].includes(link.name);
+      return ["Billing (POS)", "Return & Exchange"].includes(link.name);
     }
     return true;
   });

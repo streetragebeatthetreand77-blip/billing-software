@@ -34,6 +34,7 @@ export function POS() {
   const [linkedCustomer, setLinkedCustomer] = useState<Customer | null>(null);
   const [paymentMode, setPaymentMode] = useState<"Cash" | "Card" | "UPI" | "Store Credit">("Cash");
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [isGstBill, setIsGstBill] = useState(true);
 
   const categories = ["All", ...Array.from(new Set(mockProducts.map(p => p.category)))];
 
@@ -121,7 +122,7 @@ export function POS() {
 
       // GST rule: < 1000 is 5% (2.5 + 2.5), >= 1000 is 12% (6 + 6)
       const isLowTax = item.price < 1000;
-      const taxRate = isLowTax ? 0.05 : 0.12;
+      const taxRate = isGstBill ? (isLowTax ? 0.05 : 0.12) : 0;
       const cgstRate = taxRate / 2;
       const sgstRate = taxRate / 2;
 
@@ -146,7 +147,7 @@ export function POS() {
     const total = Math.round((subtotal + totalCgst + totalSgst) * 100) / 100;
 
     return { items, subtotal, totalCgst, totalSgst, total };
-  }, [cart]);
+  }, [cart, isGstBill]);
 
   return (
     <div className="flex h-full w-full bg-[#FAFAFA]">
@@ -260,6 +261,27 @@ export function POS() {
         </div>
 
         <div className="p-6 bg-[#FAFAFA] border-t border-[#E4E3E0]">
+          {/* Bill Type Selector */}
+          <div className="flex items-center justify-between mb-4 bg-white p-2.5 rounded-lg border border-[#E4E3E0]">
+            <span className="text-xs font-semibold text-[#141414] uppercase tracking-wider">Bill Type</span>
+            <div className="flex gap-1 bg-[#FAFAFA] p-0.5 rounded border border-[#E4E3E0]">
+              <button
+                type="button"
+                className={`text-[10px] font-mono uppercase px-3 py-1 rounded transition-all ${isGstBill ? 'bg-[#141414] text-white font-bold' : 'text-[#666666] hover:text-[#141414]'}`}
+                onClick={() => setIsGstBill(true)}
+              >
+                GST Bill
+              </button>
+              <button
+                type="button"
+                className={`text-[10px] font-mono uppercase px-3 py-1 rounded transition-all ${!isGstBill ? 'bg-[#141414] text-white font-bold' : 'text-[#666666] hover:text-[#141414]'}`}
+                onClick={() => setIsGstBill(false)}
+              >
+                Non-GST
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-2 mb-6">
             <div className="flex justify-between text-sm text-[#666666]">
               <span>Subtotal</span>
@@ -642,9 +664,9 @@ export function POS() {
               <h2 className="font-sans font-bold text-2xl tracking-tight mb-1 uppercase">STREET RAGE</h2>
               <p className="text-xs text-[#666666] font-mono whitespace-pre-line">{STORE_ADDRESS.split(', ').join('\n')}</p>
               <p className="text-xs text-[#666666] font-mono mt-1">Tel: {STORE_PHONE}</p>
-              <p className="text-xs font-mono mt-2">GSTIN: <span className="font-medium">{GSTIN}</span></p>
+              <p className="text-xs font-mono mt-2">{isGstBill ? `GSTIN: ${GSTIN}` : "ESTIMATE / NON-GST"}</p>
               <div className="mt-4 pt-4 border-t border-dashed border-[#CCCCCC]">
-                <h3 className="font-sans font-semibold tracking-widest text-xs uppercase">Tax Invoice</h3>
+                <h3 className="font-sans font-semibold tracking-widest text-xs uppercase">{isGstBill ? "Tax Invoice" : "Retail Bill / Estimate"}</h3>
                 <p className="text-[10px] text-[#666666] font-mono mt-1">{new Date().toLocaleString()}</p>
                 
                 {linkedCustomer && (

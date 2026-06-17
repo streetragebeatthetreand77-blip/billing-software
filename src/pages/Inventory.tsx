@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Download, Upload, X, Plus } from "lucide-react";
+import { Search, Download, Upload, X, Plus, Printer } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 import { saveProductToFirebase, deleteProductFromFirebase } from "@/lib/db";
@@ -205,6 +205,67 @@ export function Inventory() {
     setParsedSummary(null);
   };
 
+  const handlePrintAllBarcodes = () => {
+    if (filtered.length === 0) {
+      alert("No products to print!");
+      return;
+    }
+
+    const printEl = document.createElement('div');
+    printEl.id = 'all-barcode-stickers';
+
+    let htmlContent = '';
+    filtered.forEach((p, index) => {
+      const isLast = index === filtered.length - 1;
+      htmlContent += `
+        <div class="barcode-sticker-container" style="font-family: monospace; text-align: center; font-size: 12px; width: 50mm; height: 50mm; display: flex; flex-direction: column; align-items: center; justify-content: space-between; background: white; color: black; box-sizing: border-box; padding: 8px 2px 8px 2px; ${isLast ? '' : 'page-break-after: always; break-after: page;' }">
+          <div style="font-size: 11px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #141414; width: 44mm; padding-bottom: 2px;">STREET RAGE</div>
+          <div style="font-size: 10px; margin-top: 2px; color: #141414; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 44mm;">${p.name}</div>
+          <div style="height: 16mm; display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 2px 0; width: 44mm;">
+            <svg class="barcode-svg-element" data-barcode="${p.id}" style="max-width: 100%; height: auto;"></svg>
+          </div>
+          <div style="font-size: 9px; letter-spacing: 1px; font-family: monospace; font-weight: bold; color: #666666;">${p.id}</div>
+          <div style="font-size: 12px; font-weight: bold; border-top: 1px dashed #666666; width: 44mm; padding-top: 4px;">MRP: ₹${p.price.toLocaleString('en-IN')}</div>
+        </div>
+      `;
+    });
+
+    printEl.innerHTML = htmlContent;
+
+    const styleEl = document.createElement('style');
+    styleEl.innerHTML = `@page { size: 50mm 50mm; margin: 0; }`;
+
+    document.body.appendChild(printEl);
+    document.head.appendChild(styleEl);
+
+    // Generate crisp vector barcode for each SVG using JsBarcode
+    const svgElements = printEl.querySelectorAll('.barcode-svg-element');
+    svgElements.forEach((svgEl) => {
+      const barcodeData = svgEl.getAttribute('data-barcode');
+      if (barcodeData) {
+        try {
+          JsBarcode(svgEl, barcodeData, {
+            format: "CODE128",
+            width: 1.8,
+            height: 40,
+            displayValue: false,
+            margin: 0,
+            background: "transparent"
+          });
+        } catch (err) {
+          console.error("Barcode generation error for SKU " + barcodeData + ":", err);
+        }
+      }
+    });
+
+    window.print();
+
+    setTimeout(() => {
+      document.body.removeChild(printEl);
+      document.head.removeChild(styleEl);
+    }, 500);
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-[#F5F5F3] p-8">
       <div className="flex items-center justify-between mb-8">
@@ -234,6 +295,14 @@ export function Inventory() {
           >
             <Upload className="w-4 h-4 mr-2 text-[#666666]" />
             Bulk Upload
+          </Button>
+          <Button 
+            variant="outline"
+            className="border-[#E4E3E0] text-[#141414] hover:bg-transparent hover:border-[#141414] shadow-sm tracking-wider uppercase text-xs font-mono"
+            onClick={handlePrintAllBarcodes}
+          >
+            <Printer className="w-4 h-4 mr-2 text-[#666666]" />
+            Print All Barcodes
           </Button>
           <Button 
             className="bg-[#141414] text-white hover:bg-[#333333] shadow-sm tracking-wider uppercase text-xs"

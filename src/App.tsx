@@ -145,17 +145,20 @@ function MainAppRoutes() {
     return <LoginScreen />;
   }
 
+  const isAdmin = user?.email?.toLowerCase().includes("admin") ?? true;
+  const defaultRedirect = isAdmin ? "/dashboard" : "/pos";
+
   return (
     <BrowserRouter>
       <div className="flex h-screen w-full bg-white overflow-hidden selection:bg-[#141414] selection:text-white">
         <Sidebar />
         <main className="flex-1 flex flex-col min-w-0">
           <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/" element={<Navigate to={defaultRedirect} replace />} />
+            <Route path="/dashboard" element={isAdmin ? <Dashboard /> : <Navigate to="/pos" replace />} />
             <Route path="/pos" element={<POS />} />
-            <Route path="/inventory" element={<Inventory />} />
-            <Route path="/sales-records" element={<SalesRecords />} />
+            <Route path="/inventory" element={isAdmin ? <Inventory /> : <Navigate to="/pos" replace />} />
+            <Route path="/sales-records" element={isAdmin ? <SalesRecords /> : <Navigate to="/pos" replace />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/returns" element={<Returns />} />
             <Route path="*" element={<Navigate to="/" replace />} />

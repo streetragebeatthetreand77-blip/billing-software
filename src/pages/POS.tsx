@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { saveTransactionToFirebase, saveCustomerToFirebase, saveProductToFirebase } from "@/lib/db";
+import { useAuth } from "@/context/AuthContext";
 
 
 interface CartItem extends Product {
@@ -20,6 +21,7 @@ interface CartItem extends Product {
 }
 
 export function POS() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -924,6 +926,7 @@ export function POS() {
                     paymentMode: paymentMode,
                     discount: billDetails.totalDiscount,
                     discountType: discountType,
+                    createdBy: user?.email || "System Admin",
                     discountValue: discountValue,
                     subtotal: billDetails.subtotal,
                     cgst: billDetails.totalCgst,
@@ -1010,6 +1013,7 @@ export function POS() {
                     paymentMode: paymentMode,
                     discount: billDetails.totalDiscount,
                     discountType: discountType,
+                    createdBy: user?.email || "System Admin",
                     discountValue: discountValue,
                     subtotal: billDetails.subtotal,
                     cgst: billDetails.totalCgst,

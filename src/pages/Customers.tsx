@@ -8,14 +8,42 @@ import { Input } from "@/components/ui/input";
 import { Search, MapPin, Mail, Phone, ShoppingBag, Store, Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { saveCustomerToFirebase } from "@/lib/db";
+import { useAuth } from "@/context/AuthContext";
 
 export function Customers() {
+  const { user } = useAuth();
+  const isAdmin = user?.email?.toLowerCase().includes("admin") ?? true;
   const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
   const [search, setSearch] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isAddMode, setIsAddMode] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
   const filtered = customers.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search));
+
+  if (!isAdmin) {
+    const handleSaveForCashier = (savedCustomer: Customer) => {
+      const newCust = [savedCustomer, ...customers];
+      setCustomers(newCust);
+      mockCustomers.unshift(savedCustomer);
+      saveLocal("customers", mockCustomers);
+      saveCustomerToFirebase(savedCustomer);
+      alert("Customer registered successfully!");
+      setFormKey(prev => prev + 1);
+    };
+
+    return (
+      <div className="flex-1 overflow-auto bg-[#F5F5F3] p-8 flex justify-center items-center">
+        <div className="bg-white rounded-2xl shadow-sm border border-[#E4E3E0] overflow-hidden max-w-md w-full">
+          <CustomerForm 
+            key={formKey}
+            customer={null}
+            onSave={handleSaveForCashier}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-auto bg-[#F5F5F3] p-8">

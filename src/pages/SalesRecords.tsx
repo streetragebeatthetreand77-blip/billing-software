@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Printer, FileText, X } from "lucide-react";
+import { Search, Printer, FileText, X, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 
@@ -113,7 +113,8 @@ export function SalesRecords() {
         <div style="text-align: left; background: #F9F9F9; padding: 6px; margin: 10px 0; font-size: 10px; border-radius: 4px;">
           <strong>Invoice ID:</strong> ${tx.id}<br/>
           <strong>Client:</strong> ${tx.customer || 'Walk-in Customer'}<br/>
-          <strong>Payment Mode:</strong> ${tx.paymentMode || 'Cash'}
+          <strong>Payment Mode:</strong> ${tx.paymentMode || 'Cash'}<br/>
+          <strong>Billed By:</strong> ${tx.createdBy || 'System Admin'}
         </div>
 
         <table style="width: 100%; font-size: 10px; text-align: left; margin: 15px 0; border-collapse: collapse;">
@@ -305,6 +306,66 @@ export function SalesRecords() {
     }, 500);
   };
 
+  const handleExportCSV = () => {
+    // Columns to export
+    const headers = [
+      "Invoice ID",
+      "Date & Time",
+      "Customer",
+      "Total Items",
+      "Subtotal (Taxable)",
+      "CGST (₹)",
+      "SGST (₹)",
+      "Discount (₹)",
+      "Grand Total (₹)",
+      "Status",
+      "Payment Mode",
+      "GST Bill?",
+      "Created By"
+    ];
+
+    const rows = filtered.map(tx => {
+      const { subtotal, discount, cgst, sgst } = getTxDetails(tx);
+      const isGstStr = tx.isGst !== false ? "Yes" : "No";
+      const customerStr = tx.customer || "Walk-in Customer";
+      const createdByStr = tx.createdBy || "System Admin";
+      return [
+        tx.id,
+        tx.time,
+        customerStr,
+        tx.items,
+        subtotal.toFixed(2),
+        cgst.toFixed(2),
+        sgst.toFixed(2),
+        discount.toFixed(2),
+        tx.amount.toFixed(2),
+        tx.status,
+        tx.paymentMode || "Cash",
+        isGstStr,
+        createdByStr
+      ];
+    });
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.map(val => {
+        const str = String(val).replace(/"/g, '""');
+        return `"${str}"`;
+      }).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const filename = `sales_report_${gstFilter}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-[#F5F5F3] p-8">
       <div className="flex items-center justify-between mb-8">
@@ -345,6 +406,13 @@ export function SalesRecords() {
               Non-GST
             </button>
           </div>
+          <Button
+            onClick={handleExportCSV}
+            className="bg-[#141414] text-white hover:bg-[#333333] shadow-sm tracking-wider uppercase text-xs flex items-center gap-2"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Export to Excel
+          </Button>
         </div>
       </div>
 
@@ -359,6 +427,7 @@ export function SalesRecords() {
               <TableHead className="py-4 text-[#999999] font-mono text-[11px] uppercase tracking-wider">Invoice No</TableHead>
               <TableHead className="py-4 text-[#999999] font-mono text-[11px] uppercase tracking-wider">Date & Time</TableHead>
               <TableHead className="py-4 text-[#999999] font-mono text-[11px] uppercase tracking-wider">Customer</TableHead>
+              <TableHead className="py-4 text-[#999999] font-mono text-[11px] uppercase tracking-wider">Created By</TableHead>
               <TableHead className="py-4 text-[#999999] font-mono text-[11px] uppercase tracking-wider text-right">Items</TableHead>
               <TableHead className="py-4 text-[#999999] font-mono text-[11px] uppercase tracking-wider text-right">Amount</TableHead>
               <TableHead className="py-4 text-[#999999] font-mono text-[11px] uppercase tracking-wider text-center">Status</TableHead>
@@ -379,6 +448,9 @@ export function SalesRecords() {
                 </TableCell>
                 <TableCell className="py-4 text-sm text-[#141414]">
                   {tx.customer || <span className="text-[#999999] italic">Walk-in</span>}
+                </TableCell>
+                <TableCell className="py-4 text-xs font-mono text-[#666666] max-w-[150px] truncate" title={tx.createdBy || "System Admin"}>
+                  {tx.createdBy || "System Admin"}
                 </TableCell>
                 <TableCell className="py-4 text-right font-mono text-[#666666]">
                   {tx.items}
@@ -401,7 +473,7 @@ export function SalesRecords() {
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center text-[#999999] text-sm">
+                <TableCell colSpan={7} className="h-32 text-center text-[#999999] text-sm">
                   No billing records found matching your search.
                 </TableCell>
               </TableRow>
@@ -438,6 +510,7 @@ export function SalesRecords() {
                   <div className="text-left bg-[#F9F9F9] p-2 mb-4 text-[10px] font-mono rounded border border-[#E4E3E0]">
                     <div><strong>Client:</strong> {selectedTx.customer || 'Walk-in Customer'}</div>
                     <div className="mt-1"><strong>Payment Mode:</strong> {selectedTx.paymentMode || 'Cash'}</div>
+                    <div className="mt-1"><strong>Billed By:</strong> {selectedTx.createdBy || 'System Admin'}</div>
                   </div>
 
                   <table className="w-full text-xs font-mono mb-4 text-left">

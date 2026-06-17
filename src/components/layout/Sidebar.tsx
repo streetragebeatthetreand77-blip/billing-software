@@ -19,6 +19,13 @@ export function Sidebar() {
   const isAdmin = user?.email?.toLowerCase().includes("admin") ?? true;
   const roleName = isAdmin ? "Admin" : "Billing / Cashier";
 
+  const filteredLinks = links.filter(link => {
+    if (!isAdmin) {
+      return ["Billing (POS)", "Customers", "Return & Exchange"].includes(link.name);
+    }
+    return true;
+  });
+
   return (
     <aside className="w-64 border-r border-[#E4E3E0] bg-[#FAFAFA] flex flex-col h-full">
       <div className="p-6 border-b border-[#E4E3E0]">
@@ -28,7 +35,7 @@ export function Sidebar() {
         <p className="text-[10px] uppercase font-mono tracking-widest text-[#999999] mt-1">Retail Management Space</p>
       </div>
       <nav className="flex-1 p-4 space-y-1">
-        {links.map((link) => {
+        {filteredLinks.map((link) => {
           const Icon = link.icon;
           const isActive = location.pathname === link.href;
           return (

@@ -47,6 +47,7 @@ export interface Transaction {
     itemDiscount: number;
     overallDiscount: number;
   };
+  createdBy?: string;
 }
 
 export interface Customer {

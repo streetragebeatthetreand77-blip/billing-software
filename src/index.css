@@ -200,6 +200,7 @@ body {
   #tax-invoice, #tax-invoice * {
     visibility: visible !important;
     color: #000000 !important;
+    font-weight: 600 !important;
   }
   #tax-invoice {
     position: absolute !important;

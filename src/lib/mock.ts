@@ -9,7 +9,7 @@ export interface Product {
   imageUrl?: string;
 }
 
-export const DEFAULT_PRODUCT_IMAGE = "https://placehold.co/400x500/f5f5f3/141414?text=STREET+RAGE";
+export const DEFAULT_PRODUCT_IMAGE = "https://i.imgur.com/n3YfGtw_d.webp?maxwidth=760&fidelity=grand";
 
 export interface TransactionItem {
   id: string;

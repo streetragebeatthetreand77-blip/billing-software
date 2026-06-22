@@ -718,7 +718,6 @@ function ProductForm({
     if (!formData.category.trim()) newErrors.category = "Category is required.";
     if (formData.price <= 0) newErrors.price = "Selling price must be greater than zero.";
     if (formData.costPrice < 0) newErrors.costPrice = "Cost price cannot be negative.";
-    if (!formData.hsn.trim()) newErrors.hsn = "HSN code is required.";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -727,6 +726,7 @@ function ProductForm({
 
     onSave({
       ...formData,
+      hsn: formData.hsn.trim() || "0000",
       stock: stockMatrix
     });
   };

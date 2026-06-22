@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { mockReturns, ReturnRecord, mockProducts, mockTransactions, saveLocal, Transaction, TransactionItem } from "@/lib/mock";
+import { mockReturns, ReturnRecord, mockProducts, mockTransactions, saveLocal, Transaction, TransactionItem, STORE_ADDRESS, STORE_PHONE, GSTIN } from "@/lib/mock";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -118,7 +118,7 @@ export function Returns() {
       orderId: foundTx.id,
       date: new Date().toLocaleString(),
       customer: foundTx.customer || "Walk-in Customer",
-      type: selectedAction === "Size Exchange" ? "Size Exchange" : "Refund",
+      type: selectedAction === "Size Exchange" ? "Size Exchange" : (selectedAction === "Store Credit" ? "Store Credit" : (selectedAction === "Refund to Source" ? "Refund to Source" : "Refund")),
       status: "Processed",
       items: returnedItems,
       totalRefund: selectedAction === "Size Exchange" ? 0 : refundAmount
@@ -153,8 +153,8 @@ export function Returns() {
       }
     });
 
-    // Update original transaction status if it's a refund
-    if (processedReturn.type === "Refund") {
+    // Update original transaction status if it's a refund, store credit, or refund to source
+    if (processedReturn.type === "Refund" || processedReturn.type === "Refund to Source" || processedReturn.type === "Store Credit") {
       const tx = mockTransactions.find(t => t.id === foundTx.id);
       if (tx) {
         tx.status = "Refunded";
@@ -171,7 +171,112 @@ export function Returns() {
     saveLocal("transactions", mockTransactions);
     saveLocal("returns", mockReturns);
 
-    alert("Printing Credit Note...");
+    // Thermal Printer Slip Generation and Printing
+    const printEl = document.createElement('div');
+    printEl.id = 'tax-invoice';
+
+    const storeAddress = STORE_ADDRESS;
+    const storePhone = STORE_PHONE;
+    const gstin = GSTIN;
+
+    let label = "RETURN SLIP";
+    let typeSection = "";
+
+    if (processedReturn.type === "Refund to Source") {
+      label = "REFUND RECEIPT";
+      typeSection = `
+        <strong>Refund Method:</strong> Refund to Source<br/>
+        <strong>Refund Status:</strong> Completed (Processed)
+      `;
+    } else if (processedReturn.type === "Store Credit") {
+      label = "CREDIT NOTE";
+      typeSection = `
+        <strong>Credit Note ID:</strong> ${processedReturn.id}<br/>
+        <strong>Validity:</strong> 180 Days from Issue
+      `;
+    } else if (processedReturn.type === "Size Exchange") {
+      label = "EXCHANGE SLIP";
+      typeSection = `
+        <strong>Exchange Status:</strong> Approved & Stocks Synced
+      `;
+    }
+
+    let htmlContent = `
+      <div style="font-family: monospace; text-align: center; color: #141414; padding: 10px 4px 10px 4px;">
+        <h2 style="margin: 0 0 5px 0; font-size: 20px; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">STREET RAGE</h2>
+        <p style="margin: 0; font-size: 10px; line-height: 1.2; color: #666666;">${storeAddress.split(', ').join('<br/>')}</p>
+        <p style="margin: 3px 0; font-size: 10px; color: #666666;">Tel: ${storePhone}</p>
+        <p style="margin: 5px 0; font-size: 10px; color: #666666;">GSTIN: ${gstin}</p>
+        
+        <div style="margin: 10px 0; border-top: 1px dashed #CCCCCC; padding-top: 10px;">
+          <h3 style="margin: 0; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px;">${label}</h3>
+          <p style="margin: 5px 0 0 0; font-size: 9px; color: #999999;">${processedReturn.date}</p>
+        </div>
+        
+        <div style="text-align: left; background: #F9F9F9; padding: 6px; margin: 10px 0; font-size: 10px; border-radius: 4px; border: 1px solid #EAEAEA;">
+          <strong>Slip Ref ID:</strong> ${processedReturn.id}<br/>
+          <strong>Original Inv:</strong> ${processedReturn.orderId}<br/>
+          <strong>Customer:</strong> ${processedReturn.customer}<br/>
+          ${typeSection}
+        </div>
+
+        <table style="width: 100%; font-size: 10px; text-align: left; margin: 15px 0; border-collapse: collapse;">
+          <thead>
+            <tr style="border-b: 1px solid #CCCCCC; font-weight: bold;">
+              <th style="padding: 4px 0;">Item Detail</th>
+              <th style="padding: 4px 0; text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${processedReturn.items.map(item => `
+              <tr style="border-b: 1px solid #EAEAEA;">
+                <td style="padding: 6px 0;">
+                  <div>${item.name}</div>
+                  <div style="font-size: 8px; color: #666666;">Original Size: ${item.originalSize} | Color: ${item.originalColor}</div>
+                  <div style="font-size: 8px; color: #666666;">Reason: ${item.reason}</div>
+                  ${item.newSize ? `<div style="font-size: 8px; color: #10b981; font-weight: bold;">Exchanged to Size: ${item.newSize}</div>` : ''}
+                </td>
+                <td style="padding: 6px 0; text-align: right; vertical-align: top;">₹${item.amount.toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div style="border-top: 1px solid #CCCCCC; padding-top: 8px; font-size: 10px; line-height: 1.5;">
+          ${processedReturn.type !== "Size Exchange" ? `
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; margin-top: 5px; border-top: 1px solid #141414; padding-top: 5px;">
+              <span>Total Credit/Refunded:</span>
+              <span>₹${processedReturn.totalRefund.toLocaleString('en-IN', {maximumFractionDigits:2, minimumFractionDigits: 2})}</span>
+            </div>
+          ` : `
+            <div style="display: flex; justify-content: space-between; font-weight: bold; font-size: 12px; margin-top: 5px; border-top: 1px solid #141414; padding-top: 5px;">
+              <span>Net Exchange Diff:</span>
+              <span>₹0.00</span>
+            </div>
+          `}
+        </div>
+        
+        <p style="margin: 25px 0 0 0; font-size: 8px; color: #999999; text-transform: uppercase; letter-spacing: 1px;">
+          ${processedReturn.type === "Store Credit" ? 'This note must be presented<br/>during future checkouts.' : 'Thank you for shopping<br/>STREET RAGE Omnichannel POS'}
+        </p>
+      </div>
+    `;
+
+    printEl.innerHTML = htmlContent;
+
+    const styleEl = document.createElement('style');
+    styleEl.innerHTML = `@page { size: 80mm 200mm; margin: 0; }`;
+
+    document.body.appendChild(printEl);
+    document.head.appendChild(styleEl);
+
+    window.print();
+
+    setTimeout(() => {
+      document.body.removeChild(printEl);
+      document.head.removeChild(styleEl);
+    }, 500);
+
     setCreditNoteOpen(false);
     setSearch("");
     setFoundTx(null);

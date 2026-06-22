@@ -101,6 +101,17 @@ export async function saveTransactionToFirebase(tx: any) {
   }
 }
 
+export async function deleteTransactionFromFirebase(txId: string) {
+  const db = await getDb();
+  if (!db || !firestoreModule) return;
+  try {
+    const { doc, deleteDoc } = firestoreModule;
+    await deleteDoc(doc(db, "transactions", txId));
+  } catch (err) {
+    console.error("Firebase Delete Transaction Error:", err);
+  }
+}
+
 export async function saveCustomerToFirebase(customer: any) {
   const db = await getDb();
   if (!db || !firestoreModule) return;

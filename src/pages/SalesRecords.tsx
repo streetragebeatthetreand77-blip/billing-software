@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { mockTransactions, Transaction, STORE_ADDRESS, STORE_PHONE, GSTIN } from "@/lib/mock";
+import { mockTransactions, Transaction, STORE_ADDRESS, STORE_PHONE, GSTIN, mockProducts, mockCustomers, saveLocal } from "@/lib/mock";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,12 @@ import { Search, Printer, FileText, X, Download } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from "@/context/AuthContext";
+import { saveProductToFirebase, saveCustomerToFirebase, deleteTransactionFromFirebase } from "@/lib/db";
 
 export function SalesRecords() {
+  const { user } = useAuth();
+  const isAdmin = user?.email?.toLowerCase().includes("admin") ?? true;
   const [search, setSearch] = useState("");
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [gstFilter, setGstFilter] = useState<'all' | 'gst' | 'nongst'>('all');
@@ -384,6 +388,55 @@ export function SalesRecords() {
     document.body.removeChild(link);
   };
 
+  const handleDeleteInvoice = async (tx: Transaction) => {
+    if (!confirm("Are you sure you want to delete this invoice? The product stocks will be automatically readjusted and the customer purchase record updated.")) {
+      return;
+    }
+
+    try {
+      // 1. Readjust inventory stocks
+      if (tx.itemsList && tx.itemsList.length > 0) {
+        tx.itemsList.forEach(item => {
+          const product = mockProducts.find(p => p.id === item.id);
+          if (product) {
+            if (!product.stock[item.selectedSize]) {
+              product.stock[item.selectedSize] = {};
+            }
+            const currentQty = product.stock[item.selectedSize][item.selectedColor] || 0;
+            product.stock[item.selectedSize][item.selectedColor] = currentQty + item.quantity;
+            saveProductToFirebase(product);
+          }
+        });
+        saveLocal("products", mockProducts);
+      }
+
+      // 2. Adjust customer spent & purchase history
+      if (tx.customer && tx.customer !== "Walk-in Customer") {
+        const customer = mockCustomers.find(c => c.name === tx.customer);
+        if (customer) {
+          customer.totalSpent = Math.max(0, Math.round((customer.totalSpent - tx.amount) * 100) / 100);
+          customer.purchaseHistory = customer.purchaseHistory.filter(hTx => hTx.id !== tx.id);
+          saveCustomerToFirebase(customer);
+          saveLocal("customers", mockCustomers);
+        }
+      }
+
+      // 3. Remove transaction from mockTransactions and Firestore
+      const idx = mockTransactions.findIndex(t => t.id === tx.id);
+      if (idx !== -1) {
+        mockTransactions.splice(idx, 1);
+        saveLocal("transactions", mockTransactions);
+      }
+      await deleteTransactionFromFirebase(tx.id);
+
+      setSelectedTx(null);
+      alert("Invoice deleted and stocks adjusted successfully!");
+    } catch (e) {
+      console.error("Deletion error:", e);
+      alert("An error occurred while deleting the invoice: " + e);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto bg-[#F5F5F3] p-8">
       <div className="flex items-center justify-between mb-8">
@@ -626,15 +679,24 @@ export function SalesRecords() {
 
           <div className="p-6 bg-white border-t border-[#E4E3E0] flex gap-3">
              <Button 
-               className="w-1/2 bg-[#141414] text-white py-6"
+               className="flex-1 bg-[#141414] text-white py-6"
                onClick={() => selectedTx && handleReprint(selectedTx)}
              >
                <Printer className="w-4 h-4 mr-2" />
-               Reprint Receipt
+               Reprint
              </Button>
+             {isAdmin && (
+               <Button 
+                 variant="destructive"
+                 className="flex-1 py-6 bg-red-600 hover:bg-red-700 text-white text-xs uppercase tracking-wider font-semibold"
+                 onClick={() => selectedTx && handleDeleteInvoice(selectedTx)}
+               >
+                 Delete Record
+               </Button>
+             )}
              <Button 
                variant="outline" 
-               className="w-1/2 border-[#E4E3E0] text-[#666666]"
+               className="flex-1 border-[#E4E3E0] text-[#666666]"
                onClick={() => setSelectedTx(null)}
              >
                Close

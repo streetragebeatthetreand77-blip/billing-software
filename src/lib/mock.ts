@@ -64,7 +64,7 @@ export interface ReturnRecord {
   orderId: string;
   date: string;
   customer: string;
-  type: "Refund" | "Size Exchange";
+  type: "Refund" | "Size Exchange" | "Store Credit" | "Refund to Source";
   status: "Processed" | "Pending" | "Rejected";
   items: { id?: string; name: string; reason: string; amount: number; originalSize: string; originalColor: string; newSize?: string }[];
   totalRefund: number;

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { mockTransactions, Transaction, STORE_ADDRESS, STORE_PHONE, GSTIN, mockProducts, mockCustomers, saveLocal } from "@/lib/mock";
+import { useState, useEffect } from "react";
+import { mockTransactions, Transaction, STORE_ADDRESS, STORE_PHONE, GSTIN, mockProducts, mockCustomers, saveLocal, parseTxDate } from "@/lib/mock";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -19,12 +19,44 @@ export function SalesRecords() {
   const [gstFilter, setGstFilter] = useState<'all' | 'gst' | 'nongst'>('all');
   const [exportType, setExportType] = useState<'all' | 'gst' | 'nongst'>('all');
 
-  const filtered = mockTransactions.filter(tx => {
+  const [transactions, setTransactions] = useState<Transaction[]>(() => [...mockTransactions]);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  useEffect(() => {
+    const handleSync = () => {
+      setTransactions([...mockTransactions]);
+    };
+    window.addEventListener("db-sync-complete", handleSync);
+    return () => window.removeEventListener("db-sync-complete", handleSync);
+  }, []);
+
+  const filtered = transactions.filter(tx => {
     if (gstFilter === 'gst') {
       if (tx.isGst === false) return false;
     } else if (gstFilter === 'nongst') {
       if (tx.isGst !== false) return false;
     }
+    
+    // Date filter
+    if (startDate || endDate) {
+      const txDate = parseTxDate(tx.time);
+      if (txDate) {
+        if (startDate) {
+          const start = new Date(startDate);
+          start.setHours(0, 0, 0, 0);
+          if (txDate < start) return false;
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (txDate > end) return false;
+        }
+      } else {
+        return false;
+      }
+    }
+
     return (
       tx.id.toLowerCase().includes(search.toLowerCase()) || 
       (tx.customer && tx.customer.toLowerCase().includes(search.toLowerCase())) ||
@@ -330,12 +362,32 @@ export function SalesRecords() {
       "Created By"
     ];
 
-    const txToExport = mockTransactions.filter(tx => {
+    const txToExport = transactions.filter(tx => {
       if (type === 'gst') {
         if (tx.isGst === false) return false;
       } else if (type === 'nongst') {
         if (tx.isGst !== false) return false;
       }
+      
+      // Date filter
+      if (startDate || endDate) {
+        const txDate = parseTxDate(tx.time);
+        if (txDate) {
+          if (startDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            if (txDate < start) return false;
+          }
+          if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            if (txDate > end) return false;
+          }
+        } else {
+          return false;
+        }
+      }
+
       if (search) {
         return (
           tx.id.toLowerCase().includes(search.toLowerCase()) || 
@@ -426,6 +478,7 @@ export function SalesRecords() {
       if (idx !== -1) {
         mockTransactions.splice(idx, 1);
         saveLocal("transactions", mockTransactions);
+        setTransactions([...mockTransactions]);
       }
       await deleteTransactionFromFirebase(tx.id);
 
@@ -497,6 +550,41 @@ export function SalesRecords() {
             </Button>
           </div>
         </div>
+      </div>
+
+      {/* Date Filter Bar */}
+      <div className="flex gap-4 items-center bg-white p-3 rounded-xl border border-[#E4E3E0] shadow-sm mb-6 flex-wrap animate-in fade-in">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#666666] font-mono uppercase">From:</span>
+          <Input
+            type="date"
+            value={startDate}
+            onChange={e => setStartDate(e.target.value)}
+            className="w-40 h-8 text-xs bg-white border-[#E4E3E0] shadow-none focus-visible:ring-1 focus-visible:ring-[#141414]"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#666666] font-mono uppercase">To:</span>
+          <Input
+            type="date"
+            value={endDate}
+            onChange={e => setEndDate(e.target.value)}
+            className="w-40 h-8 text-xs bg-white border-[#E4E3E0] shadow-none focus-visible:ring-1 focus-visible:ring-[#141414]"
+          />
+        </div>
+        {(startDate || endDate) && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setStartDate("");
+              setEndDate("");
+            }}
+            className="h-8 px-2 hover:bg-red-50 text-red-600 hover:text-red-700 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1 transition-colors"
+          >
+            <X className="w-3 h-3" />
+            Clear
+          </Button>
+        )}
       </div>
 
       <motion.div 

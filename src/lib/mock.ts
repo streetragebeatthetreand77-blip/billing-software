@@ -101,4 +101,74 @@ export const mockReturns: ReturnRecord[] = loadLocal("returns", initialReturns);
 
 export const GSTIN = "29DULPK3195L1ZT";
 export const STORE_ADDRESS = "43, Shivaji Rd, opp. to arfath function hall, Rajiv Gandhi Colony, Shivaji Nagar, Bengaluru, Karnataka 560051";
-export const STORE_PHONE = "+91 78929 37265";
+export const STORE_PHONE = "+91 8660117913";
+
+export function parseTxDate(timeStr: string): Date | null {
+  if (!timeStr) return null;
+  
+  // Try direct parsing first
+  const direct = new Date(timeStr);
+  if (!isNaN(direct.getTime())) {
+    return direct;
+  }
+  
+  try {
+    // Match pattern for DD/MM/YYYY or YYYY/MM/DD
+    const match = timeStr.match(/(\d{1,4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,4})/);
+    if (match) {
+      const part1 = parseInt(match[1], 10);
+      const part2 = parseInt(match[2], 10);
+      const part3 = parseInt(match[3], 10);
+      
+      let year = 2026;
+      let month = 0;
+      let day = 1;
+      
+      if (part1 > 1000) { // YYYY-MM-DD
+        year = part1;
+        month = part2 - 1;
+        day = part3;
+      } else if (part3 > 1000) { // DD-MM-YYYY or MM-DD-YYYY
+        year = part3;
+        if (part1 > 12) {
+          day = part1;
+          month = part2 - 1;
+        } else if (part2 > 12) {
+          day = part2;
+          month = part1 - 1;
+        } else {
+          // Default to Indian format DD/MM/YYYY since it's Bengaluru
+          day = part1;
+          month = part2 - 1;
+        }
+      } else {
+        // Short year? YY
+        year = part3 + (part3 < 50 ? 2000 : 1900);
+        day = part1;
+        month = part2 - 1;
+      }
+      
+      let hours = 0;
+      let minutes = 0;
+      let seconds = 0;
+      const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i);
+      if (timeMatch) {
+        hours = parseInt(timeMatch[1], 10);
+        minutes = parseInt(timeMatch[2], 10);
+        if (timeMatch[3]) {
+          seconds = parseInt(timeMatch[3], 10);
+        }
+        if (timeMatch[4]) {
+          const ampm = timeMatch[4].toUpperCase();
+          if (ampm === "PM" && hours < 12) hours += 12;
+          if (ampm === "AM" && hours === 12) hours = 0;
+        }
+      }
+      const d = new Date(year, month, day, hours, minutes, seconds);
+      if (!isNaN(d.getTime())) return d;
+    }
+  } catch (e) {
+    console.error("Error parsing date:", e);
+  }
+  return null;
+}

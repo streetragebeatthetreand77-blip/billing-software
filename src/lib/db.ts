@@ -63,9 +63,37 @@ export async function syncWithFirebase() {
       returns.forEach((r: any) => mockReturns.push(r));
       saveLocal("returns", mockReturns);
     }
+
+    // Dispatch sync complete event to notify UI components
+    window.dispatchEvent(new CustomEvent("db-sync-complete"));
   } catch (err) {
     console.error("Firebase DB Sync Error:", err);
   }
+}
+
+function cleanObject(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (obj instanceof Date) return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanObject);
+  }
+  if (typeof obj === 'object') {
+    const proto = Object.getPrototypeOf(obj);
+    if (proto !== null && proto !== Object.prototype) {
+      return obj;
+    }
+    const cleaned: any = {};
+    for (const key in obj) {
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        const val = obj[key];
+        if (val !== undefined) {
+          cleaned[key] = cleanObject(val);
+        }
+      }
+    }
+    return cleaned;
+  }
+  return obj;
 }
 
 export async function saveProductToFirebase(product: any) {
@@ -73,7 +101,7 @@ export async function saveProductToFirebase(product: any) {
   if (!db || !firestoreModule) return;
   try {
     const { doc, setDoc } = firestoreModule;
-    await setDoc(doc(db, "products", product.id), product);
+    await setDoc(doc(db, "products", product.id), cleanObject(product));
   } catch (err) {
     console.error("Firebase Save Product Error:", err);
   }
@@ -95,7 +123,7 @@ export async function saveTransactionToFirebase(tx: any) {
   if (!db || !firestoreModule) return;
   try {
     const { doc, setDoc } = firestoreModule;
-    await setDoc(doc(db, "transactions", tx.id), tx);
+    await setDoc(doc(db, "transactions", tx.id), cleanObject(tx));
   } catch (err) {
     console.error("Firebase Save Transaction Error:", err);
   }
@@ -117,7 +145,7 @@ export async function saveCustomerToFirebase(customer: any) {
   if (!db || !firestoreModule) return;
   try {
     const { doc, setDoc } = firestoreModule;
-    await setDoc(doc(db, "customers", customer.id), customer);
+    await setDoc(doc(db, "customers", customer.id), cleanObject(customer));
   } catch (err) {
     console.error("Firebase Save Customer Error:", err);
   }
@@ -128,7 +156,7 @@ export async function saveReturnToFirebase(ret: any) {
   if (!db || !firestoreModule) return;
   try {
     const { doc, setDoc } = firestoreModule;
-    await setDoc(doc(db, "returns", ret.id), ret);
+    await setDoc(doc(db, "returns", ret.id), cleanObject(ret));
   } catch (err) {
     console.error("Firebase Save Return Error:", err);
   }

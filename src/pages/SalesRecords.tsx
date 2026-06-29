@@ -82,6 +82,8 @@ export function SalesRecords() {
       discountValue?: number;
       discountAmount?: number;
       totalDiscount?: number;
+      cgst?: number;
+      sgst?: number;
     }[] = [];
 
     if (tx.itemsList && tx.itemsList.length > 0) {
@@ -97,7 +99,9 @@ export function SalesRecords() {
           discountType: item.discountType,
           discountValue: item.discountValue,
           discountAmount: item.discountAmount,
-          totalDiscount: item.totalDiscount
+          totalDiscount: item.totalDiscount,
+          cgst: item.cgst,
+          sgst: item.sgst
         });
       });
       if (!subtotal) {
@@ -112,8 +116,7 @@ export function SalesRecords() {
         });
       }
     } else {
-      const isLowTax = (tx.amount / tx.items) < 1000;
-      const taxRate = isLowTax ? 0.05 : 0.12;
+      const taxRate = 0.05;
       subtotal = tx.amount / (1 + taxRate);
       cgst = (tx.amount - subtotal) / 2;
       sgst = cgst;
@@ -123,7 +126,9 @@ export function SalesRecords() {
         qty: tx.items,
         total: subtotal,
         price: tx.amount / tx.items,
-        hsn: "6205"
+        hsn: "6205",
+        cgst: cgst,
+        sgst: sgst
       });
     }
 
@@ -248,8 +253,7 @@ export function SalesRecords() {
         const totalItemDiscountAmount = item.totalDiscount || item.discountAmount || 0;
         const taxable = Math.max(0, rawItemSubtotal - totalItemDiscountAmount);
 
-        const isLowTax = item.price < 1000;
-        const taxRatePercent = isLowTax ? 5 : 12;
+        const taxRatePercent = 5;
 
         if (!hsnGroups[itemHsn]) {
           hsnGroups[itemHsn] = {

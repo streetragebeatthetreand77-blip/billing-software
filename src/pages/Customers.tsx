@@ -37,7 +37,7 @@ export function Customers() {
         <div className="bg-white rounded-2xl shadow-sm border border-[#E4E3E0] overflow-hidden max-w-md w-full">
           <CustomerForm 
             key={formKey}
-            customer={null}
+            customer={null as Customer | null}
             onSave={handleSaveForCashier}
           />
         </div>
@@ -246,7 +246,13 @@ function CustomerView({ customer, onEdit, onDelete }: { customer: Customer, onEd
   );
 }
 
-function CustomerForm({ customer, onSave }: { customer: Customer | null, onSave: (c: Customer) => void }) {
+interface CustomerFormProps {
+  key?: any;
+  customer: Customer | null;
+  onSave: (c: Customer) => void;
+}
+
+function CustomerForm({ customer, onSave }: CustomerFormProps) {
   const [formData, setFormData] = useState<Customer>(customer || {
     id: `C${Math.floor(Math.random() * 100000)}`,
     name: "",

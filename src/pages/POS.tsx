@@ -186,9 +186,9 @@ export function POS() {
       const itemDiscountedSubtotal = Math.max(0, item.itemSubtotalAfterDiscount - allocatedOverallDiscount);
       discountedSubtotalRaw += itemDiscountedSubtotal;
 
-      // GST rule: < 1000 is 5% (2.5 + 2.5), >= 1000 is 12% (6 + 6)
+      // GST rule: Flat 5% (2.5% CGST + 2.5% SGST)
       const isLowTax = item.price < 1000;
-      const taxRate = isGstBill ? (isLowTax ? 0.05 : 0.12) : 0;
+      const taxRate = isGstBill ? 0.05 : 0;
       const cgstRate = taxRate / 2;
       const sgstRate = taxRate / 2;
 
@@ -358,8 +358,7 @@ export function POS() {
         const totalItemDiscountAmount = item.totalDiscount || item.discountAmount || 0;
         const taxable = Math.max(0, rawItemSubtotal - totalItemDiscountAmount);
 
-        const isLowTax = item.price < 1000;
-        const taxRatePercent = isLowTax ? 5 : 12;
+        const taxRatePercent = 5;
 
         if (!hsnGroups[itemHsn]) {
           hsnGroups[itemHsn] = {

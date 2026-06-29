@@ -478,7 +478,7 @@ export function Returns() {
                <div className="bg-white border border-[#EAEAEA] rounded-md p-3 mb-4">
                  <div className="text-[10px] uppercase text-[#666666] tracking-wider mb-2">Adjustments</div>
                  {processedReturn.items.map((item, i) => {
-                   const taxRate = item.amount < 1000 ? 0.05 : 0.12;
+                   const taxRate = 0.05;
                    const base = item.amount / (1 + taxRate);
                    const cgst = (item.amount - base) / 2;
                    return (
